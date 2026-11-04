@@ -4,7 +4,14 @@ A shared wall of assignments and presentations. Each poster shows its deadline, 
 days are left, the assignment brief, and a tickable requirement checklist. Anyone with the
 link can add, edit, drag and tick — changes sync live.
 
-## Open it now
+## Live link (share this)
+
+**https://ospeto.github.io/mas-wall/** — free GitHub Pages hosting, data in Supabase,
+works from any phone or laptop. No account, no laptop left on. Repo:
+https://github.com/Ospeto/mas-wall (updates deploy automatically on push; see
+[DEPLOY-PAGES.md](DEPLOY-PAGES.md)).
+
+## Open it locally
 
 - This Mac (local server mode): **http://localhost:4321**
 - Same Wi-Fi (classmates): **http://192.168.31.50:4321** — the laptop must stay awake and
