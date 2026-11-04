@@ -10,9 +10,10 @@ the top bar to lock again.
 
 ## Live link (share this)
 
-**https://89-125-244-178.sslip.io:8443/** — runs on the Singapore-region VPS, works from
-any phone or laptop with no account. **Editing password: `MAS200`.** Viewing is open;
-adding, dragging, ticking and deleting prompt for the password once per browser session.
+**https://mas.wavypremium.xyz:8443/** — runs on the VPS, works from any phone or laptop
+with no account. **Editing password: `MAS200`.** Viewing is open; adding, dragging,
+ticking and deleting prompt for the password once per browser session.
+(The raw `https://89-125-244-178.sslip.io:8443/` address still works too.)
 
 Operations, backups and password changes: [DEPLOY-VPS.md](DEPLOY-VPS.md). The old GitHub
 Pages link now redirects here.

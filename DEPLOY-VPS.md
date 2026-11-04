@@ -1,11 +1,12 @@
 # Deploy on the VPS (current live setup)
 
-**Live board: https://89-125-244-178.sslip.io:8443/** — password for editing: **MAS200**.
+**Live board: https://mas.wavypremium.xyz:8443/** — password for editing: **MAS200**.
 Viewing is open; adding, editing, dragging and deleting require the password.
+(The raw `https://89-125-244-178.sslip.io:8443/` address still works too.)
 
-- Provider/host: SpeedyPage? no — this is the **Japan** box (`japan` in SSH config, root@89.125.244.178)
+- Server: the **Japan** box (`japan` in SSH config, root@89.125.244.178)
 - App directory: `/opt/mas-wall` (Node 20, systemd service `mas-wall`)
-- Reverse proxy: Caddy with a free Let's Encrypt certificate for `89-125-244-178.sslip.io`, listening on **8443** (port 443 belongs to another service on that box)
+- Reverse proxy: Caddy with free Let's Encrypt certificates for `mas.wavypremium.xyz` and `89-125-244-178.sslip.io`, listening on **8443** (port 443 belongs to another service on that box)
 - App only listens on `127.0.0.1:4321`; 4321/tcp is not reachable from the internet
 - Data: `/opt/mas-wall/data/state.json` (atomic writes; seed in `data/seed.json`)
 - Write password is enforced by `server.js` (`x-write-password` header); only its SHA-256 hash is in code
