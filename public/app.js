@@ -31,7 +31,7 @@
   const TRASH_ARM_MARGIN = 24;
   const TZ_OFFSET_MIN = 390; /* Asia/Rangoon = UTC+06:30 */
   const API_MIN_INTERVAL = 1000 / 6; /* ~6 writes/second, contract 8.11 */
-  const SAVE_DEBOUNCE = 350;
+  const SAVE_DEBOUNCE = 100;
   const PRESENCE_HEARTBEAT = 25000;
   const PRESENCE_POS_THROTTLE = 150;
   const CONN_RETRY_MAX = 8000;
@@ -2719,6 +2719,12 @@
       .catch(function () { return null; });
   }
 
+  var supaConfigPromise = null;
+  function getSupabaseConfig() {
+    if (!supaConfigPromise) supaConfigPromise = readSupabaseConfig();
+    return supaConfigPromise;
+  }
+
   function createSupabaseClient(cfg) {
     if (!window.supabase || typeof window.supabase.createClient !== 'function') return false;
     try {
@@ -2753,22 +2759,37 @@
   function supaLoad() {
     var sb = state.supabase;
     if (!sb) return Promise.reject(new Error('no supabase client'));
-    return sb.from('cards').select('id,data').then(function (cardsRes) {
+    /* both tables are independent: run the two queries in parallel so the first paint
+       waits for one round trip instead of two */
+    var cardsP = sb.from('cards').select('id,data');
+    var boardP = sb.from('board').select('data').eq('id', 1).single();
+    return Promise.all([cardsP, boardP]).then(function (results) {
+      var cardsRes = results[0];
+      var boardRes = results[1];
       if (cardsRes && cardsRes.error) throw cardsRes.error;
       var cards = supaRowsToCards(cardsRes ? cardsRes.data : []);
-      return sb.from('board').select('data').eq('id', 1).single().then(function (boardRes) {
-        var course = null;
-        if (boardRes && !boardRes.error && boardRes.data && boardRes.data.data) course = boardRes.data.data;
-        return { rev: 0, course: normaliseCourse(course), cards: cards };
-      }, function () {
-        return { rev: 0, course: normaliseCourse(null), cards: cards };
-      });
+      var course = null;
+      if (boardRes && !boardRes.error && boardRes.data && boardRes.data.data) course = boardRes.data.data;
+      return { rev: 0, course: normaliseCourse(course), cards: cards };
     });
+  }
+
+  function supaBroadcast(event, payload) {
+    var ch = state.supaChannel;
+    if (!ch) return;
+    try {
+      ch.send({ type: 'broadcast', event: event, payload: payload });
+    } catch (e) {}
   }
 
   function supaWrite(op, noEnqueue) {
     var sb = state.supabase;
     if (!sb || !op || typeof op.op !== 'string') return Promise.resolve({ ok: false, error: 'no-client' });
+    if (op.op === 'card.upsert' && op.card && op.card.id) {
+      supaBroadcast('card.upsert', { card: cloneCard(op.card) });
+    } else if (op.op === 'card.delete' && op.id) {
+      supaBroadcast('card.delete', { id: op.id });
+    }
     var query = null;
     if (op.op === 'card.upsert' && op.card && op.card.id) {
       query = sb.from('cards').upsert({ id: op.card.id, data: cloneCard(op.card), updated_at: new Date().toISOString() });
@@ -2873,6 +2894,14 @@
           queueCacheSave();
         }
       });
+      /* instant echo: broadcast the change at the same time as the database write so
+         other tabs/devices do not wait for the Postgres replication round trip */
+      ch.on('broadcast', { event: 'card.upsert' }, function (msg) {
+        if (msg && msg.payload && msg.payload.card) handleRemoteUpsert(msg.payload.card);
+      });
+      ch.on('broadcast', { event: 'card.delete' }, function (msg) {
+        if (msg && msg.payload && msg.payload.id) handleRemoteDelete(String(msg.payload.id));
+      });
       ch.on('presence', { event: 'sync' }, function () { syncSupaPresence(); });
       ch.subscribe(function (status) {
         if (status === 'SUBSCRIBED') {
@@ -2933,12 +2962,12 @@
   }
 
   function detectSupabase() {
-    readSupabaseConfig().then(function (cfg) {
-      if (!cfg) { goOfflineMode(); return; }
-      loadScriptOnce(SUPABASE_VENDOR).then(function (loaded) {
-        if (!loaded || !createSupabaseClient(cfg)) { goOfflineMode(); return; }
-        state.mode = 'supabase';
-        supaLoad().then(function (data) {
+    Promise.all([getSupabaseConfig(), loadScriptOnce(SUPABASE_VENDOR)]).then(function (results) {
+      var cfg = results[0];
+      var loaded = results[1];
+      if (!cfg || !loaded || !createSupabaseClient(cfg)) { goOfflineMode(); return; }
+      state.mode = 'supabase';
+      supaLoad().then(function (data) {
           applyServerState(data);
           renderAll();
           populateCourseFilter();
@@ -2952,7 +2981,6 @@
           setConn('connecting');
           scheduleSupaReconnect();
         });
-      });
     });
   }
 
@@ -3053,6 +3081,9 @@
     renderPresence();
     setConn('connecting');
     exposeApi();
+    /* warm the Supabase config request in parallel with the local-API probe so static
+       hosting does not pay for a sequential round trip after the 404 */
+    getSupabaseConfig();
     boot();
     startHeartbeat();
     schedulePresence(true);
