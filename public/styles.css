@@ -2766,6 +2766,87 @@ body.drawer-open .drawer-backdrop {
   }
 }
 
+/* drawer head actions + read-only view mode ----------------------------- */
+.drawer-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.btn-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 13px;
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  background: var(--accent);
+  color: var(--ink);
+  font: 600 10px/1 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 140ms var(--ease), border-color 140ms var(--ease);
+}
+.btn-edit:hover {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
+  color: var(--paper);
+}
+.drawer.is-view .drawer-form input:disabled,
+.drawer.is-view .drawer-form input[readonly],
+.drawer.is-view .drawer-form textarea:disabled,
+.drawer.is-view .drawer-form textarea[readonly],
+.drawer.is-view .drawer-form select:disabled {
+  opacity: 1;
+  color: var(--text);
+  -webkit-text-fill-color: var(--text);
+  background: transparent;
+  border-color: transparent;
+  padding-left: 0;
+  padding-right: 0;
+  cursor: default;
+}
+.drawer.is-view .drawer-form textarea {
+  resize: none;
+  max-height: 340px;
+  overflow: auto;
+}
+.drawer.is-view .req-edit-list > li {
+  background: transparent;
+  border-color: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
+.drawer.is-view .drawer-req-text {
+  border-color: transparent !important;
+  background: transparent !important;
+  padding-left: 0 !important;
+}
+.drawer.is-view .field:has(#drawerColorGroup),
+.drawer.is-view .field-row:has(#drawerDoneToggle) {
+  display: none;
+}
+.drawer.is-view .drawer-form .field-label {
+  opacity: 0.55;
+}
+.drawer.is-view .drawer-form .select-wrap::after {
+  display: none;
+}
+.drawer.is-view .drawer-form .field-label {
+  opacity: 0.55;
+}
+.drawer.is-view .drawer-form button {
+  display: none;
+}
+.drawer.is-view .drawer-foot {
+  display: none;
+}
+.drawer.is-view .drawer-form {
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+
 /* longer brief editor --------------------------------------------------- */
 #drawerBriefInput {
   min-height: 190px;

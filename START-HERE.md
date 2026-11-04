@@ -28,7 +28,9 @@ https://github.com/Ospeto/mas-wall (updates deploy automatically on push; see
 2. Drag a poster anywhere on the wall — position is saved. While you drag (or after
    holding a poster for ~half a second) a bin appears at the bottom: drop the poster on it
    to delete, and use **Undo** in the toast if it was a mistake.
-3. Tick a requirement on the card; the progress ring and "x/y done" update.
+3. Tap a poster (or an agenda row on your phone) to open it read-only — no keyboard pops
+   up. Press **Edit** in the drawer when you actually want to change something, then tick
+   requirements; the progress ring and "x/y done" update.
 4. Open the same URL in a second browser window: everything syncs live.
 5. Switch **WALL / AGENDA** (or press `g`) to see the same deadlines as a list.
 

@@ -201,7 +201,7 @@
   const lastPointer = { x: 0, y: 0 };
   let suppressClickUntil = 0;
 
-  const drawer = { id: null, color: 'bone', done: false, saveTimer: 0, stateTimer: 0, lastFocus: null };
+  const drawer = { id: null, color: 'bone', done: false, mode: 'edit', saveTimer: 0, stateTimer: 0, lastFocus: null };
   const drag = { active: false, visual: false, node: null, card: null, pid: 0, sx: 0, sy: 0, ox: 0, oy: 0, x: 0, y: 0, z: 0, moved: false, movedBy: 0, lifted: false, longPress: false, lpTimer: 0, prevZ: 1 };
 
   /* ------------------------------- DOM cache ------------------------------ */
@@ -216,7 +216,7 @@
     'drawerDueDate', 'drawerDueTime', 'drawerWeightInput', 'drawerBriefInput', 'drawerModeSelect',
     'drawerNotesInput', 'drawerLinkInput', 'drawerColorGroup', 'drawerDoneToggle', 'drawerForm',
     'drawerDueBadge', 'drawerProgress', 'drawerReqs', 'btnAddReq', 'btnDuplicateCard',
-    'btnDeleteCard', 'drawerSaveState', 'drawerClose', 'drawerTitle'
+    'btnDeleteCard', 'drawerSaveState', 'drawerClose', 'drawerTitle', 'drawerEditBtn', 'drawerForm'
   ];
   function cacheDom() {
     for (var i = 0; i < DOM_IDS.length; i++) {
@@ -1473,6 +1473,64 @@
     });
   }
 
+  /* view mode: the drawer opens as a read-only preview (agenda/rail taps); the Edit
+     button flips the same drawer into the autosaving editor */
+  function applyDrawerMode(mode) {
+    drawer.mode = mode === 'view' ? 'view' : 'edit';
+    var view = drawer.mode === 'view';
+    if (!ui.drawer) return;
+    ui.drawer.classList.toggle('is-view', view);
+    if (ui.drawerEditBtn) ui.drawerEditBtn.hidden = !view;
+    if (ui.drawerForm) {
+      var controls = ui.drawerForm.querySelectorAll('input, select, textarea, button');
+      for (var i = 0; i < controls.length; i++) {
+        var c = controls[i];
+        if (c.tagName === 'BUTTON') { c.disabled = view; continue; }
+        if (c.tagName === 'TEXTAREA' || (c.tagName === 'INPUT' && (c.type === 'text' || c.type === 'url'))) {
+          c.readOnly = view;
+          c.disabled = false;
+        } else {
+          c.disabled = view;
+        }
+      }
+    }
+    /* a clean preview only shows fields that actually have content */
+    var optional = [
+      ui.drawerCourseInput, ui.drawerKindInput, ui.drawerWeightInput,
+      ui.drawerBriefInput, ui.drawerNotesInput, ui.drawerLinkInput
+    ];
+    for (var k = 0; k < optional.length; k++) {
+      var elm = optional[k];
+      if (!elm || !elm.closest) continue;
+      var field = elm.closest('.field');
+      if (field) field.hidden = view && !String(elm.value || '').trim();
+    }
+    if (ui.btnAddReq) ui.btnAddReq.disabled = view;
+    if (ui.drawerSaveState) ui.drawerSaveState.hidden = view;
+    if (ui.btnDuplicateCard) ui.btnDuplicateCard.disabled = view;
+    if (ui.btnDeleteCard) ui.btnDeleteCard.disabled = view;
+    if (view) setSaveState('idle');
+    sizeViewTextareas(view);
+  }
+
+  function sizeViewTextareas(view) {
+    var areas = [ui.drawerBriefInput, ui.drawerNotesInput];
+    for (var i = 0; i < areas.length; i++) {
+      var area = areas[i];
+      if (!area) continue;
+      if (view) {
+        area.style.minHeight = '0';
+        area.style.resize = 'none';
+        area.style.height = '0px';
+        area.style.height = Math.min(area.scrollHeight + 2, 340) + 'px';
+      } else {
+        area.style.minHeight = '';
+        area.style.resize = '';
+        area.style.height = '';
+      }
+    }
+  }
+
   function openDrawer(id, opts) {
     var card = getCard(id);
     if (!card) return;
@@ -1484,6 +1542,7 @@
     drawer.done = !!card.done;
     fillDrawer(card);
     renderDrawerMeta(card);
+    applyDrawerMode(opts.mode === 'view' ? 'view' : 'edit');
     setSaveState('idle');
     if (ui.drawer) {
       ui.drawer.dataset.cardId = card.id;
@@ -1498,10 +1557,12 @@
     document.documentElement.dataset.drawer = 'open';
     setPageInert(true);
     schedulePresence(true);
-    var focusTarget = ui.drawerTitleInput || firstFocusable(ui.drawer);
+    var focusTarget = opts.mode === 'view'
+      ? (ui.drawerClose || ui.drawer)
+      : (ui.drawerTitleInput || firstFocusable(ui.drawer));
     var run = function () {
       if (!drawer.id) return;
-      var target = (opts.focusTitle && ui.drawerTitleInput) ? ui.drawerTitleInput : focusTarget;
+      var target = (opts.mode !== 'view' && opts.focusTitle && ui.drawerTitleInput) ? ui.drawerTitleInput : focusTarget;
       if (!target || !document.contains(target)) return;
       try { target.focus({ preventScroll: true }); } catch (e) { try { target.focus(); } catch (e2) {} }
       if (opts.focusTitle && opts.selectTitle && typeof target.select === 'function') {
@@ -1531,6 +1592,7 @@
       ui.drawer.setAttribute('aria-hidden', 'true');
       delete ui.drawer.dataset.cardId;
     }
+    applyDrawerMode('edit');
     if (ui.drawerBackdrop) {
       ui.drawerBackdrop.classList.remove('is-open');
       ui.drawerBackdrop.hidden = true;
@@ -1740,7 +1802,7 @@
     }
   }
   function drawerOnInput(e) {
-    if (!drawer.id) return;
+    if (!drawer.id || drawer.mode === 'view') return;
     var target = e.target;
     if (target && target.closest && target.closest('#drawerReqs')) return;
     if (target && target === ui.drawerDoneToggle) {
@@ -2156,6 +2218,10 @@
   }
 
   /* ------------------------------ canvas events --------------------------- */
+  /* phones open posters read-only first (no keyboard popping up); desktop keeps the
+     fast click-to-edit path. The drawer's Edit button flips either one into edit mode. */
+  function posterOpenMode() { return state.coarse ? 'view' : 'edit'; }
+
   function onCanvasClick(e) {
     if (Date.now() < suppressClickUntil) { e.preventDefault(); e.stopPropagation(); return; }
     var target = e.target;
@@ -2176,10 +2242,10 @@
     if (target.closest('input[type="checkbox"]')) return;
     if (target.closest('button, a, select, textarea')) {
       var openBtn = target.closest('[data-action="open"]');
-      if (openBtn && poster) { e.preventDefault(); openDrawer(poster.dataset.id); }
+      if (openBtn && poster) { e.preventDefault(); openDrawer(poster.dataset.id, { mode: posterOpenMode() }); }
       return;
     }
-    if (poster) { e.preventDefault(); openDrawer(poster.dataset.id); }
+    if (poster) { e.preventDefault(); openDrawer(poster.dataset.id, { mode: posterOpenMode() }); }
   }
   function onCanvasChange(e) {
     var target = e.target;
@@ -2513,14 +2579,14 @@
         var item = e.target && e.target.closest ? e.target.closest('.rail-item[data-id]') : null;
         if (!item) return;
         e.preventDefault();
-        openDrawer(item.dataset.id);
+        openDrawer(item.dataset.id, { mode: 'view' });
       });
       ui.deadlineRail.addEventListener('keydown', function (e) {
         if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
         var item = e.target && e.target.closest ? e.target.closest('.rail-item[data-id]') : null;
         if (!item) return;
         e.preventDefault();
-        openDrawer(item.dataset.id);
+        openDrawer(item.dataset.id, { mode: 'view' });
       });
     }
     if (ui.agendaGroups) {
@@ -2528,14 +2594,14 @@
         var row = e.target && e.target.closest ? e.target.closest('.agenda-item[data-id]') : null;
         if (!row) return;
         e.preventDefault();
-        openDrawer(row.dataset.id);
+        openDrawer(row.dataset.id, { mode: 'view' });
       });
       ui.agendaGroups.addEventListener('keydown', function (e) {
         if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
         var row = e.target && e.target.closest ? e.target.closest('.agenda-item[data-id]') : null;
         if (!row) return;
         e.preventDefault();
-        openDrawer(row.dataset.id);
+        openDrawer(row.dataset.id, { mode: 'view' });
       });
     }
 
@@ -2584,6 +2650,13 @@
         scheduleDrawerSave();
       });
     }
+    if (ui.drawerEditBtn) ui.drawerEditBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      if (drawer.mode !== 'view') return;
+      applyDrawerMode('edit');
+      var input = ui.drawerTitleInput;
+      if (input) { try { input.focus({ preventScroll: true }); input.select(); } catch (err) {} }
+    });
     if (ui.drawerClose) ui.drawerClose.addEventListener('click', function (e) { e.preventDefault(); closeDrawer(); });
     if (ui.drawerBackdrop) ui.drawerBackdrop.addEventListener('click', function (e) { e.preventDefault(); closeDrawer(); });
     if (ui.btnDuplicateCard) ui.btnDuplicateCard.addEventListener('click', function (e) { e.preventDefault(); duplicateCard(); });

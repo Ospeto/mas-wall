@@ -183,9 +183,12 @@
           <h2 id="drawerTitle" class="sr-only">Poster details</h2>
           <p class="drawer-sub"><span id="drawerDueBadge" class="drawer-due-badge">No due date</span><span id="drawerProgress" class="drawer-progress">0/0</span></p>
         </div>
-        <button id="drawerClose" class="btn btn-icon" type="button" aria-label="Close poster details">
-          <span class="x-icon" aria-hidden="true"></span>
-        </button>
+        <div class="drawer-head-actions">
+          <button id="drawerEditBtn" class="btn btn-edit" type="button" hidden>Edit</button>
+          <button id="drawerClose" class="btn btn-icon" type="button" aria-label="Close poster details">
+            <span class="x-icon" aria-hidden="true"></span>
+          </button>
+        </div>
       </header>
 
       <form id="drawerForm" class="drawer-form" autocomplete="off" novalidate>
