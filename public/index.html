@@ -14,6 +14,11 @@
      and warm the Supabase client download so it is already in cache when boot needs it -->
 <link rel="preconnect" href="https://vxzglftvusjuqnprveup.supabase.co" crossorigin />
 <link rel="preload" href="vendor/supabase-js.min.js" as="script" />
+<!-- Speed: inline the (public-safe) Supabase project config so the first data request
+     does not wait for an extra config round trip. Keep in sync with
+     public/supabase-config.json (that file remains the fallback and the single source
+     for other deployments). -->
+<script>window.MAS_SUPABASE_CONFIG = {"url":"https://vxzglftvusjuqnprveup.supabase.co","anonKey":"sb_publishable_dPhC6doZHBuNXdrub2Qbig_2N9BFDjh"};</script>
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>

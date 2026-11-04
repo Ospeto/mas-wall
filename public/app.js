@@ -2721,7 +2721,22 @@
 
   var supaConfigPromise = null;
   function getSupabaseConfig() {
-    if (!supaConfigPromise) supaConfigPromise = readSupabaseConfig();
+    if (!supaConfigPromise) {
+      var embedded = window.MAS_SUPABASE_CONFIG;
+      if (
+        embedded &&
+        typeof embedded === 'object' &&
+        typeof embedded.url === 'string' &&
+        /^https?:\/\//i.test(embedded.url) &&
+        typeof embedded.anonKey === 'string' &&
+        embedded.anonKey
+      ) {
+        /* index.html embeds the public config to skip one round trip on first load */
+        supaConfigPromise = Promise.resolve({ url: embedded.url, anonKey: embedded.anonKey });
+      } else {
+        supaConfigPromise = readSupabaseConfig();
+      }
+    }
     return supaConfigPromise;
   }
 
