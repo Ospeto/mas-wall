@@ -190,6 +190,7 @@
     mode: 'unknown',
     transport: 'sse',
     unlocked: false,
+    writePassword: null,
     pendingWrite: null,
     pollForced: false,
     supabase: null,
@@ -438,7 +439,10 @@
     return withRate(function () {
       return fetch('api/op', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          'x-write-password': state.writePassword || ''
+        },
         body: JSON.stringify(op)
       }).then(function (res) {
         return res.text().then(function (text) {
@@ -448,6 +452,15 @@
         });
       });
     }).then(function (r) {
+      if (r.res.status === 401) {
+        state.unlocked = false;
+        state.writePassword = null;
+        try { sessionStorage.removeItem(UNLOCK_KEY); } catch (e) {}
+        updateLockUi();
+        toast('Write password required — unlock again');
+        setSaveState('error');
+        return { ok: false, error: 'locked', status: 401 };
+      }
       if (!r.res.ok || (r.body && r.body.ok === false)) {
         setSaveState('error');
         return { ok: false, error: (r.body && r.body.error) || ('HTTP ' + r.res.status), status: r.res.status };
@@ -2490,7 +2503,8 @@
         return;
       }
       state.unlocked = true;
-      try { sessionStorage.setItem(UNLOCK_KEY, '1'); } catch (e) {}
+      state.writePassword = pw;
+      try { sessionStorage.setItem(UNLOCK_KEY, pw); } catch (e) {}
       updateLockUi();
       if (ui.unlockError) ui.unlockError.hidden = true;
       closeDialog(ui.unlockDialog);
@@ -2502,6 +2516,7 @@
   }
   function lockWriting() {
     state.unlocked = false;
+    state.writePassword = null;
     state.pendingWrite = null;
     try { sessionStorage.removeItem(UNLOCK_KEY); } catch (e) {}
     updateLockUi();
@@ -3241,7 +3256,14 @@
     cacheDom();
     restoreIdentity();
     restoreView();
-    try { state.unlocked = sessionStorage.getItem(UNLOCK_KEY) === '1'; } catch (e) { state.unlocked = false; }
+    try {
+      var savedPw = sessionStorage.getItem(UNLOCK_KEY);
+      state.unlocked = !!savedPw;
+      state.writePassword = savedPw || null;
+    } catch (e) {
+      state.unlocked = false;
+      state.writePassword = null;
+    }
     updateLockUi();
     state.outbox = loadOutbox();
     state.coarse = !!(mqCoarse && mqCoarse.matches);

@@ -48,6 +48,15 @@ const PRESENCE_THROTTLE_MS = 100; // hard ceiling: at most 10 presence broadcast
 
 const DEBUG = process.env.DEBUG === "1" || process.env.MAS_WALL_DEBUG === "1";
 
+// Write access password: the browser unlocks locally, and every write must carry the
+// matching x-write-password header. Only the SHA-256 hash is kept here.
+const WRITE_HASH = process.env.WRITE_HASH || "5a0e2a5671c5f76a04a307d6a5e41bb2dc84742b8211f06889897fcb4c943ebc";
+function writePasswordOk(req) {
+  const supplied = req.headers["x-write-password"];
+  if (typeof supplied !== "string" || !supplied) return false;
+  return crypto.createHash("sha256").update(supplied).digest("hex") === WRITE_HASH;
+}
+
 // Client-generated ids are opaque tokens; keep them verbatim (1-64 printable chars)
 // so an echo from the server can never fork a poster into a duplicate.
 const ID_RE = /^[!-~]{1,64}$/;
@@ -670,6 +679,10 @@ function updateCourse(rawCourse) {
 }
 
 async function handleOp(req, res) {
+  if (!writePasswordOk(req)) {
+    log("POST /api/op rejected: write password required");
+    throw new HttpError(401, "write password required");
+  }
   const body = await readJsonBody(req);
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new HttpError(400, "body must be a JSON object");
