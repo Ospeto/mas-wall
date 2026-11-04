@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>MAS WALL — Assignments, presentations &amp; everything due</title>
+<meta name="description" content="A shared studio wall for MAS assignments and presentations. Drag posters, tick requirements, everything syncs live." />
+<meta name="color-scheme" content="dark" />
+<meta name="theme-color" content="#1B1915" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%231B1915'/%3E%3Crect x='5' y='5' width='22' height='22' fill='%23E8451F'/%3E%3Crect x='9' y='9' width='14' height='14' fill='%23171410'/%3E%3C/svg%3E" />
+<link rel="preload" href="fonts/anton-latin-400.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="fonts/archivo-latin-var.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<a class="skip-link" href="#stage">Skip to the wall</a>
+
+<div id="app" class="app">
+
+  <noscript>
+    <div class="noscript">
+      <p class="noscript-kicker">JavaScript is off</p>
+      <p class="noscript-copy">The wall is drawn by script. Turn JavaScript on and reload — the posters are worth it.</p>
+    </div>
+  </noscript>
+
+  <!-- ===================================================================
+       MASTHEAD  ·  brand spine, title block, stats, presence, actions
+       =================================================================== -->
+  <header id="masthead" class="masthead">
+    <div class="brand">
+      <span id="brandMark" class="brand-mark" aria-hidden="true"><span>MAS</span></span>
+      <div class="brand-text">
+        <h1 id="wallTitle" class="wall-title">MAS WALL</h1>
+        <p id="wallSubtitle" class="wall-subtitle">Assignments, presentations &amp; everything due</p>
+      </div>
+    </div>
+
+    <div class="masthead-meta">
+      <p id="wallTerm" class="wall-term">Semester 1 · 2026</p>
+      <p id="wallStats" class="wall-stats">8 posters · 1 done</p>
+    </div>
+
+    <div class="masthead-people">
+      <ul id="presenceList" class="presence-list" aria-label="People online"></ul>
+      <span id="presenceCount" class="presence-count">1 online</span>
+      <button id="btnMe" class="btn btn-ghost btn-me" type="button" aria-label="Change your name">
+        <span class="btn-label">Guest 1</span>
+      </button>
+    </div>
+
+    <div class="masthead-actions">
+      <button id="btnShare" class="btn btn-ghost" type="button">
+        <span class="btn-label">Share</span>
+      </button>
+      <button id="btnAdd" class="btn btn-primary" type="button">
+        <span class="btn-label">New poster</span>
+      </button>
+      <button id="btnHelp" class="btn btn-icon" type="button" aria-label="Keyboard shortcuts and help" aria-haspopup="dialog">
+        <span aria-hidden="true">?</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ===================================================================
+       DEADLINE STRIP  ·  filmstrip of the next eight deadlines
+       =================================================================== -->
+  <section id="deadlineStrip" class="deadline-strip" aria-label="Next deadlines">
+    <div id="deadlineRail" class="deadline-rail" role="list">
+      <!-- app.js injects .rail-item nodes here, e.g.
+      <a class="rail-item" role="listitem" data-id="card-id" data-urgency="today">
+        <span class="rail-day">06</span>
+        <span class="rail-month">NOV</span>
+        <span class="rail-title">Response 04: Sound &amp; Space</span>
+        <span class="rail-course">MAS 608</span>
+        <span class="rail-when">today</span>
+      </a> -->
+    </div>
+  </section>
+
+  <!-- ===================================================================
+       TOOLBAR  ·  filters, search, view switch, connection state
+       =================================================================== -->
+  <div id="toolbar" class="toolbar" role="toolbar" aria-label="Filter and search posters">
+    <div id="filterType" class="chip-set" role="group" aria-label="Filter by type">
+      <button class="chip" type="button" data-type-filter="all" aria-pressed="true">All</button>
+      <button class="chip" type="button" data-type-filter="assignment" aria-pressed="false">Assignments</button>
+      <button class="chip" type="button" data-type-filter="presentation" aria-pressed="false">Presentations</button>
+      <button class="chip" type="button" data-type-filter="other" aria-pressed="false">Other</button>
+    </div>
+
+    <div class="toolbar-selects">
+      <div class="select-wrap">
+        <label class="sr-only" for="filterCourse">Course</label>
+        <select id="filterCourse">
+          <option value="all">All courses</option>
+        </select>
+      </div>
+      <div class="select-wrap">
+        <label class="sr-only" for="filterStatus">Status</label>
+        <select id="filterStatus">
+          <option value="all">Any status</option>
+          <option value="open">Open</option>
+          <option value="done">Done</option>
+          <option value="late">Late</option>
+          <option value="week">This week</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="search">
+      <label class="sr-only" for="searchInput">Search posters</label>
+      <input id="searchInput" type="search" placeholder="Search titles, courses, notes" autocomplete="off" spellcheck="false" />
+      <kbd class="search-key" aria-hidden="true">/</kbd>
+    </div>
+
+    <div id="viewToggle" class="view-toggle" role="group" aria-label="View">
+      <button type="button" data-view="wall" aria-pressed="true">Wall</button>
+      <button type="button" data-view="agenda" aria-pressed="false">Agenda</button>
+    </div>
+
+    <span id="connBadge" class="conn-badge" data-state="connecting" role="status">Connecting</span>
+  </div>
+
+  <div id="offlineBanner" class="offline-banner" role="status" hidden>
+    Offline — changes stay in this browser until the server is back.
+  </div>
+
+  <!-- ===================================================================
+       STAGE  ·  freeform wall + agenda
+       =================================================================== -->
+  <main id="stage" class="stage">
+    <section id="wallView" class="wall-view" aria-label="Poster wall">
+      <div id="wallCanvas" class="wall-canvas"><!-- posters injected by app.js --></div>
+
+      <div id="wallEmpty" class="wall-empty" hidden>
+        <p class="wall-empty-kicker">Nothing pinned yet</p>
+        <h2 class="wall-empty-title">Bare wall.</h2>
+        <p class="wall-empty-copy">Pin your first assignment or presentation. Drag it anywhere, tick the requirements as you go — everyone on the link sees it move.</p>
+        <p class="wall-empty-hint">Press <kbd>N</kbd> for a new poster · <kbd>G</kbd> for the agenda</p>
+      </div>
+    </section>
+
+    <section id="agendaView" class="agenda-view" aria-label="Agenda" hidden>
+      <div id="agendaGroups" class="agenda-groups">
+        <!-- app.js injects .agenda-group nodes here, e.g.
+        <section class="agenda-group">
+          <h3 class="agenda-head"><span class="agenda-label">NOVEMBER 2026</span><span class="agenda-total">3 posters</span></h3>
+          <ol class="agenda-list">
+            <li class="agenda-item" data-urgency="late">
+              <span class="agenda-day">09</span>
+              <span class="agenda-body">
+                <span class="agenda-title">Reading the Moving Image</span>
+                <span class="agenda-meta">MAS 601 · Seminar presentation · 20%</span>
+              </span>
+              <span class="agenda-state">2/5 done</span>
+            </li>
+          </ol>
+        </section> -->
+      </div>
+    </section>
+  </main>
+
+  <!-- ===================================================================
+       DRAWER  ·  poster detail + requirements editor (autosaves)
+       =================================================================== -->
+  <div id="drawerBackdrop" class="drawer-backdrop"></div>
+
+  <aside id="drawer" class="drawer" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+    <div class="drawer-panel">
+      <header class="drawer-head">
+        <div class="drawer-heading">
+          <p id="drawerKicker" class="drawer-kicker">POSTER</p>
+          <h2 id="drawerTitle" class="sr-only">Poster details</h2>
+          <p class="drawer-sub"><span id="drawerDueBadge" class="drawer-due-badge">No due date</span><span id="drawerProgress" class="drawer-progress">0/0</span></p>
+        </div>
+        <button id="drawerClose" class="btn btn-icon" type="button" aria-label="Close poster details">
+          <span class="x-icon" aria-hidden="true"></span>
+        </button>
+      </header>
+
+      <form id="drawerForm" class="drawer-form" autocomplete="off" novalidate>
+        <div class="field field-wide">
+          <label class="field-label" for="drawerTitleInput">Title</label>
+          <input id="drawerTitleInput" name="title" type="text" maxlength="200" placeholder="What is it?" />
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label class="field-label" for="drawerTypeSelect">Type</label>
+            <div class="select-wrap">
+              <select id="drawerTypeSelect" name="type">
+                <option value="assignment">Assignment</option>
+                <option value="presentation">Presentation</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label class="field-label" for="drawerCourseInput">Course</label>
+            <input id="drawerCourseInput" name="course" type="text" maxlength="24" placeholder="MAS 601" />
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label class="field-label" for="drawerKindInput">Kind</label>
+            <input id="drawerKindInput" name="kind" type="text" maxlength="48" placeholder="Seminar presentation" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="drawerModeSelect">Work</label>
+            <div class="select-wrap">
+              <select id="drawerModeSelect" name="mode">
+                <option value="individual">Individual</option>
+                <option value="group">Group</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label class="field-label" for="drawerDueDate">Due date</label>
+            <input id="drawerDueDate" name="dueDate" type="date" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="drawerDueTime">Time</label>
+            <input id="drawerDueTime" name="dueTime" type="time" />
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label class="field-label" for="drawerWeightInput">Weight</label>
+            <input id="drawerWeightInput" name="weight" type="text" maxlength="12" placeholder="20%" />
+          </div>
+          <div class="field">
+            <span class="field-label" id="colorGroupLabel">Paper</span>
+            <div id="drawerColorGroup" class="swatches" role="group" aria-labelledby="colorGroupLabel">
+              <button type="button" class="swatch" data-color="bone" aria-label="Bone paper" aria-pressed="false"></button>
+              <button type="button" class="swatch" data-color="blush" aria-label="Blush paper" aria-pressed="false"></button>
+              <button type="button" class="swatch" data-color="sage" aria-label="Sage paper" aria-pressed="false"></button>
+              <button type="button" class="swatch" data-color="sky" aria-label="Sky paper" aria-pressed="false"></button>
+              <button type="button" class="swatch" data-color="butter" aria-label="Butter paper" aria-pressed="false"></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="field field-wide">
+          <label class="field-label" for="drawerBriefInput">Brief</label>
+          <textarea id="drawerBriefInput" name="brief" rows="8" maxlength="4000" placeholder="What exactly is being asked? Paste the prompt, deliverables and assessment notes here."></textarea>
+        </div>
+
+        <div class="field field-wide">
+          <label class="field-label" for="drawerNotesInput">Notes</label>
+          <textarea id="drawerNotesInput" name="notes" rows="2" maxlength="4000" placeholder="Room, group, print shop, whatever."></textarea>
+        </div>
+
+        <div class="field field-wide">
+          <label class="field-label" for="drawerLinkInput">Link</label>
+          <input id="drawerLinkInput" name="link" type="url" maxlength="2000" placeholder="https://" />
+        </div>
+
+        <div class="field-row field-row-tight">
+          <label class="check" for="drawerDoneToggle">
+            <input id="drawerDoneToggle" type="checkbox" />
+            <span class="check-box" aria-hidden="true"></span>
+            <span class="check-text">Mark as done</span>
+          </label>
+        </div>
+
+        <section class="req-section" aria-labelledby="req-heading">
+          <div class="req-head">
+            <h3 id="req-heading" class="field-label">Requirements</h3>
+            <button id="btnAddReq" class="btn btn-mini" type="button">Add requirement</button>
+          </div>
+          <ul id="drawerReqs" class="req-edit-list"></ul>
+        </section>
+      </form>
+
+      <footer class="drawer-foot">
+        <p id="drawerSaveState" class="save-state" aria-live="polite">Saved</p>
+        <div class="drawer-foot-actions">
+          <button id="btnDuplicateCard" class="btn btn-ghost" type="button">Duplicate</button>
+          <button id="btnDeleteCard" class="btn btn-danger" type="button">Delete</button>
+        </div>
+      </footer>
+    </div>
+  </aside>
+
+  <!-- ===================================================================
+       TOASTS + DIALOGS
+       =================================================================== -->
+  <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
+
+  <dialog id="nameDialog" class="dialog" aria-labelledby="nameDialogTitle">
+    <form class="dialog-inner" method="dialog">
+      <p class="dialog-kicker">Who's pinning</p>
+      <h2 id="nameDialogTitle" class="dialog-title">Sign the wall</h2>
+      <p class="dialog-copy">Your name shows up next to the posters you move. No account, no email — it lives in this browser.</p>
+      <div class="field field-wide">
+        <label class="field-label" for="nameInput">Display name</label>
+        <input id="nameInput" type="text" maxlength="24" placeholder="e.g. Aye" autocomplete="nickname" />
+      </div>
+      <div class="dialog-actions">
+        <button id="nameCancel" class="btn btn-ghost" type="button">Not now</button>
+        <button id="nameSave" class="btn btn-primary" type="submit">Pin me up</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="helpDialog" class="dialog" aria-labelledby="helpTitle">
+    <div class="dialog-inner">
+      <p class="dialog-kicker">Keyboard</p>
+      <h2 id="helpTitle" class="dialog-title">Shortcuts</h2>
+      <dl class="keys">
+        <div class="key-row"><dt><kbd>N</kbd></dt><dd>New poster</dd></div>
+        <div class="key-row"><dt><kbd>/</kbd></dt><dd>Search the wall</dd></div>
+        <div class="key-row"><dt><kbd>G</kbd></dt><dd>Wall / agenda</dd></div>
+        <div class="key-row"><dt><kbd>?</kbd></dt><dd>This panel</dd></div>
+        <div class="key-row"><dt><kbd>Esc</kbd></dt><dd>Close drawer or dialog</dd></div>
+        <div class="key-row"><dt><kbd>Drag</kbd></dt><dd>Move a poster anywhere on the wall</dd></div>
+      </dl>
+      <p class="dialog-copy dialog-copy-tight">Everything is shared — this link is open to anyone who has it.</p>
+      <div class="dialog-actions">
+        <button id="helpClose" class="btn btn-primary" type="button">Got it</button>
+      </div>
+    </div>
+  </dialog>
+
+</div>
+
+<script src="app.js" defer></script>
+</body>
+</html>

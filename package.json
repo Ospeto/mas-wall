@@ -1,0 +1,15 @@
+{
+  "name": "mas-wall",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Collaborative poster-wall dashboard for MAS assignments and presentations",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "preview:static": "node static-server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

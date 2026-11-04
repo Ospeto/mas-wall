@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>MAS WALL — design preview</title>
+<meta name="description" content="Static design prototype of the MAS WALL poster dashboard. Not the app." />
+<meta name="color-scheme" content="dark" />
+<meta name="theme-color" content="#1B1915" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%231B1915'/%3E%3Crect x='5' y='5' width='22' height='22' fill='%23E8451F'/%3E%3Crect x='9' y='9' width='14' height='14' fill='%23171410'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<!--
+  DESIGN PREVIEW — static, no app.js. Same markup + CSS as index.html so the
+  look can be reviewed before interactions land.
+  Query flags (handy for headless screenshots):
+    ?clean=1   hide the preview note
+    ?drawer=1  open the drawer
+    ?agenda=1  show the agenda view
+    ?help=1    open the shortcuts dialog
+-->
+<body>
+<div id="app" class="app">
+
+  <header id="masthead" class="masthead">
+    <div class="brand">
+      <span id="brandMark" class="brand-mark" aria-hidden="true"><span>MAS</span></span>
+      <div class="brand-text">
+        <h1 id="wallTitle" class="wall-title">MAS WALL</h1>
+        <p id="wallSubtitle" class="wall-subtitle">Assignments, presentations &amp; everything due</p>
+      </div>
+    </div>
+    <div class="masthead-meta">
+      <p id="wallTerm" class="wall-term">Semester 1 · 2026</p>
+      <p id="wallStats" class="wall-stats">8 posters · 1 done</p>
+    </div>
+    <div class="masthead-people">
+      <ul id="presenceList" class="presence-list" aria-label="People online">
+        <li>AY</li><li>KM</li><li>SU</li>
+      </ul>
+      <span id="presenceCount" class="presence-count">3 online</span>
+      <button id="btnMe" class="btn btn-ghost btn-me" type="button" aria-label="Change your name"><span class="btn-label">Aye</span></button>
+    </div>
+    <div class="masthead-actions">
+      <button id="btnShare" class="btn btn-ghost" type="button"><span class="btn-label">Share</span></button>
+      <button id="btnAdd" class="btn btn-primary" type="button"><span class="btn-label">New poster</span></button>
+      <button id="btnHelp" class="btn btn-icon" type="button" aria-label="Keyboard shortcuts and help" aria-haspopup="dialog"><span aria-hidden="true">?</span></button>
+    </div>
+  </header>
+
+  <section id="deadlineStrip" class="deadline-strip" aria-label="Next deadlines">
+    <div id="deadlineRail" class="deadline-rail" role="list">
+      <a class="rail-item" role="listitem" data-id="c_608response" data-urgency="today">
+        <span class="rail-day">06</span>
+        <span class="rail-month">NOV</span>
+        <span class="rail-title">Response 04: Sound &amp; Space</span>
+        <span class="rail-course">MAS 608</span>
+        <span class="rail-when">today</span>
+      </a>
+      <a class="rail-item" role="listitem" data-id="c_601seminar" data-urgency="soon">
+        <span class="rail-day">09</span>
+        <span class="rail-month">NOV</span>
+        <span class="rail-title">Reading the Moving Image</span>
+        <span class="rail-course">MAS 601</span>
+        <span class="rail-when">in 3 days</span>
+      </a>
+      <a class="rail-item" role="listitem" data-id="c_602essay" data-urgency="week">
+        <span class="rail-day">15</span>
+        <span class="rail-month">NOV</span>
+        <span class="rail-title">Archive, Memory, Machine</span>
+        <span class="rail-course">MAS 602</span>
+        <span class="rail-when">in 9 days</span>
+      </a>
+      <a class="rail-item" role="listitem" data-id="c_610group" data-urgency="later">
+        <span class="rail-day">20</span>
+        <span class="rail-month">NOV</span>
+        <span class="rail-title">Case Study: Studio Practice</span>
+        <span class="rail-course">MAS 610</span>
+        <span class="rail-when">in 2 weeks</span>
+      </a>
+      <a class="rail-item" role="listitem" data-id="c_605poster" data-urgency="later">
+        <span class="rail-day">26</span>
+        <span class="rail-month">NOV</span>
+        <span class="rail-title">Field Notes Poster</span>
+        <span class="rail-course">MAS 605</span>
+        <span class="rail-when">in 3 weeks</span>
+      </a>
+      <a class="rail-item" role="listitem" data-id="c_690proposal" data-urgency="later">
+        <span class="rail-day">04</span>
+        <span class="rail-month">DEC</span>
+        <span class="rail-title">Thesis Proposal Draft v1</span>
+        <span class="rail-course">MAS 690</span>
+        <span class="rail-when">in 4 weeks</span>
+      </a>
+    </div>
+  </section>
+
+  <div id="toolbar" class="toolbar" role="toolbar" aria-label="Filter and search posters">
+    <div id="filterType" class="chip-set" role="group" aria-label="Filter by type">
+      <button class="chip" type="button" data-type-filter="all" aria-pressed="true">All</button>
+      <button class="chip" type="button" data-type-filter="assignment" aria-pressed="false">Assignments</button>
+      <button class="chip" type="button" data-type-filter="presentation" aria-pressed="false">Presentations</button>
+      <button class="chip" type="button" data-type-filter="other" aria-pressed="false">Other</button>
+    </div>
+    <div class="toolbar-selects">
+      <div class="select-wrap">
+        <label class="sr-only" for="filterCourse">Course</label>
+        <select id="filterCourse">
+          <option>All courses</option><option>MAS 601</option><option>MAS 602</option><option>MAS 605</option><option>MAS 608</option><option>MAS 610</option><option>MAS 690</option>
+        </select>
+      </div>
+      <div class="select-wrap">
+        <label class="sr-only" for="filterStatus">Status</label>
+        <select id="filterStatus">
+          <option>Any status</option><option>Open</option><option>Done</option><option>Late</option><option>This week</option>
+        </select>
+      </div>
+    </div>
+    <div class="search">
+      <label class="sr-only" for="searchInput">Search posters</label>
+      <input id="searchInput" type="search" placeholder="Search titles, courses, notes" autocomplete="off" spellcheck="false" />
+      <kbd class="search-key" aria-hidden="true">/</kbd>
+    </div>
+    <div id="viewToggle" class="view-toggle" role="group" aria-label="View">
+      <button type="button" data-view="wall" aria-pressed="true">Wall</button>
+      <button type="button" data-view="agenda" aria-pressed="false">Agenda</button>
+    </div>
+    <span id="connBadge" class="conn-badge" data-state="live" role="status">Live</span>
+  </div>
+
+  <main id="stage" class="stage">
+    <section id="wallView" class="wall-view" aria-label="Poster wall">
+      <div id="wallCanvas" class="wall-canvas">
+
+        <article class="poster" data-id="c_601seminar" data-type="presentation" data-color="blush"
+                 style="left:56px;top:44px;width:356px;--rot:-1.4deg;--z:1">
+          <div class="poster-tape" aria-hidden="true"></div>
+          <header class="poster-head">
+            <span class="poster-kicker"><span class="poster-course">MAS 601</span><span class="poster-kind">Seminar presentation</span></span>
+            <button class="poster-open" data-action="open" aria-label="Open details">⋯</button>
+          </header>
+          <h2 class="poster-title" tabindex="0">Reading the Moving Image</h2>
+          <div class="poster-due" data-urgency="soon">
+            <span class="due-day">09</span><span class="due-month">NOV</span>
+            <span class="due-count">in 3 days</span>
+          </div>
+          <p class="poster-brief">12-minute seminar talk on one sequence from a film of your choice. Argue how editing and sound construct meaning, then take questions.</p>
+          <ul class="poster-reqs">
+            <li class="req"><label><input type="checkbox" data-req-id="r1" checked><span class="req-box"></span><span class="req-text">Pick a 2–4 min sequence</span></label></li>
+            <li class="req"><label><input type="checkbox" data-req-id="r2"><span class="req-box"></span><span class="req-text">12 min talk + 3 min Q&amp;A</span></label></li>
+            <li class="req"><label><input type="checkbox" data-req-id="r3"><span class="req-box"></span><span class="req-text">6–8 slides, no walls of text</span></label></li>
+            <li class="req"><label><input type="checkbox" data-req-id="r4"><span class="req-box"></span><span class="req-text">Screen the clip (max 3 min)</span></label></li>
+            <li class="req"><label><input type="checkbox" data-req-id="r5"><span class="req-box"></span><span class="req-text">Upload deck + references by 23:59</span></label></li>
+          </ul>
+          <footer class="poster-foot">
+            <span class="poster-weight">20%</span>
+            <span class="poster-progress" style="--p:60"><span class="ring"></span><span class="poster-pct">3/5</span></span>
+          </footer>
+        </article>
+
+        <article class="poster" data-id="c_602essay" data-type="assignment" data-color="sage"
+                 style="left:460px;top:150px;width:384px;--rot:1.1deg;--z:2">
+          <div class="poster-tape" aria-hidden="true"></div>
+          <header class="poster-head">
+            <span class="poster-kicker"><span class="poster-course">MAS 602</span><span class="poster-kind">Critical essay</span></span>
+            <button class="poster-open" data-action="open" aria-label="Open details">⋯</button>
+          </header>
+          <h2 class="poster-title" tabindex="0">Archive, Memory, Machine</h2>
+          <div class="poster-due" data-urgency="week">
+            <span class="due-day">15</span><span class="due-month">NOV</span>
+            <span class="due-count">in 9 days</span>
+          </div>
+          <p class="poster-brief">A critical essay on how archival media shapes collective memory. Use at least two case studies from the course reader.</p>
+          <ul class="poster-reqs">
+            <li class="req"><label><input type="checkbox" data-req-id="r1"><span class="req-box"></span><span class="req-text">2,500 words ±10%</span></label></li>
+            <li class="req"><label><input type="checkbox" data-req-id="r2"><span class="req-box"></span><span class="req-text">12 peer-reviewed sources</span></label></li>
+            <li class="req"><label><input type="checkbox" data-req-id="r3"><span class="req-box"></span><span class="req-text">Annotated bibliography</span></label></li>
+            <li class="req"><label><input type="checkbox" data-req-id="r4"><span class="req-box"></span><span class="req-text">Turnitin below 15%</span></label></li>
+          </ul>
+          <footer class="poster-foot">
+            <span class="poster-weight">30%</span>
+            <span class="poster-progress" style="--p:0"><span class="ring"></span><span class="poster-pct">0/4</span></span>
+          </footer>
+        </article>
+
+        <article class="poster" data-id="c_610group" data-type="presentation" data-color="butter"
+                 style="left:884px;top:38px;width:392px;--rot:-0.8deg;--z:3">
+          <div class="poster-tape" aria-hidden="true"></div>
+          <header class="poster-head">
+            <span class="poster-kicker"><span class="poster-course">MAS 610</span><span class="poster-kind">Group presentation</span></span>
+            <button class="poster-open" data-action="open" aria-label="Open details">⋯</button>
+          </header>
+          <h2 class="poster-title" tabindex="0">Case Study: Studio Practice</h2>
+          <div class="poster-due" data-urgency="later">
+            <span class="due-day">20</span><span class="due-month">NOV</span>
+            <span class="due-count">in 2 weeks</span>
+          </div>
+          <p class="poster-brief">Group case study of a working studio or collective. Present the site, its economics, and one unresolved tension.</p>
+          <ul class="poster-reqs">
+            <li class="req"><label><input type="checkbox" data-req-id="r1" checked><span class="req-box"></span><span class="req-text">Groups of 4 — confirm members</span></label></li>
+            <li class="req"><label><input type="checkbox" data-req-id="r2" checked><span class="req-box"></span><span class="req-text">One local case study</span></label></li>
+            <li class="req"><label><input type="checkbox" data-req-id="r3"><span class="req-box"></span><span class="req-text">10 slides maximum</span></label></li>
+            <li class="req"><label><input type="checkbox" data-req-id="r4"><span class="req-box"></span><span class="req-text">Every member speaks</span></label></li>
+            <li class="req"><label><input type="checkbox" data-req-id="r5"><span class="req-box"></span><span class="req-text">Rehearse to 15 minutes</span></label></li>
+          </ul>
+          <footer class="poster-foot">
+            <span class="poster-weight">25%</span>
+            <span class="poster-progress" style="--p:40"><span class="ring"></span><span class="poster-pct">2/5</span></span>
+          </footer>
+        </article>
+
+        <article class="poster" data-id="c_608response" data-type="assignment" data-color="sky"
+                 style="left:760px;top:648px;width:340px;--rot:1.6deg;--z:4">
+          <div class="poster-tape" aria-hidden="true"></div>
+          <header class="poster-head">
+            <span class="poster-kicker"><span class="poster-course">MAS 608</span><span class="poster-kind">Reading response</span></span>
+            <button class="poster-open" data-action="open" aria-label="Open details">⋯</button>
+          </header>
+          <h2 class="poster-title" tabindex="0">Response 04: Sound &amp; Space</h2>
+          <div class="poster-due" data-urgency="late">
+            <span class="due-day">06</span><span class="due-month">NOV</span>
+            <span class="due-count">late 2d</span>
+          </div>
+          <p class="poster-brief">Respond to the Week 8 reading on sound and spatial practice. Take a position, don't summarise.</p>
+          <ul class="poster-reqs">
+            <li class="req"><label><input type="checkbox" data-req-id="r1"><span class="req-box"></span><span class="req-text">700–900 words</span></label></li>
+            <li class="req"><label><input type="checkbox" data-req-id="r2"><span class="req-box"></span><span class="req-text">Respond to Week 8 reading</span></label></li>
+            <li class="req"><label><input type="checkbox" data-req-id="r3"><span class="req-box"></span><span class="req-text">One image + caption</span></label></li>
+          </ul>
+          <footer class="poster-foot">
+            <span class="poster-weight">10%</span>
+            <span class="poster-progress" style="--p:0"><span class="ring"></span><span class="poster-pct">0/3</span></span>
+          </footer>
+        </article>
+
+        <article class="poster is-done" data-id="c_602memo" data-type="assignment" data-color="bone"
+                 style="left:150px;top:672px;width:344px;--rot:-1.8deg;--z:5">
+          <div class="poster-tape" aria-hidden="true"></div>
+          <header class="poster-head">
+            <span class="poster-kicker"><span class="poster-course">MAS 602</span><span class="poster-kind">Reading memo</span></span>
+            <button class="poster-open" data-action="open" aria-label="Open details">⋯</button>
+          </header>
+          <h2 class="poster-title" tabindex="0">Reading Memo 03</h2>
+          <div class="poster-due" data-urgency="done">
+            <span class="due-day">02</span><span class="due-month">NOV</span>
+            <span class="due-count">submitted</span>
+          </div>
+          <p class="poster-brief">One page on Benjamin's aura essay. Bring a question you actually want answered.</p>
+          <ul class="poster-reqs">
+            <li class="req"><label><input type="checkbox" data-req-id="r1" checked><span class="req-box"></span><span class="req-text">One page, single spaced</span></label></li>
+            <li class="req"><label><input type="checkbox" data-req-id="r2" checked><span class="req-box"></span><span class="req-text">One discussion question</span></label></li>
+          </ul>
+          <footer class="poster-foot">
+            <span class="poster-weight">5%</span>
+            <span class="poster-progress" style="--p:100"><span class="ring"></span><span class="poster-pct">2/2</span></span>
+          </footer>
+        </article>
+
+      </div>
+      <div id="wallEmpty" class="wall-empty" hidden>
+        <p class="wall-empty-kicker">Nothing pinned yet</p>
+        <h2 class="wall-empty-title">Bare wall.</h2>
+        <p class="wall-empty-copy">Pin your first assignment or presentation. Drag it anywhere, tick the requirements as you go — everyone on the link sees it move.</p>
+        <p class="wall-empty-hint">Press <kbd>N</kbd> for a new poster · <kbd>G</kbd> for the agenda</p>
+      </div>
+    </section>
+
+    <section id="agendaView" class="agenda-view" aria-label="Agenda" hidden>
+      <div id="agendaGroups" class="agenda-groups">
+        <section class="agenda-group">
+          <h3 class="agenda-head"><span class="agenda-label">NOVEMBER 2026</span><span class="agenda-total">4 posters</span></h3>
+          <ol class="agenda-list">
+            <li class="agenda-item" data-urgency="late">
+              <span class="agenda-day">06</span>
+              <span class="agenda-body"><span class="agenda-title">Response 04: Sound &amp; Space</span><span class="agenda-meta">MAS 608 · Reading response · 10%</span></span>
+              <span class="agenda-state">0/3 done</span>
+            </li>
+            <li class="agenda-item" data-urgency="today">
+              <span class="agenda-day">09</span>
+              <span class="agenda-body"><span class="agenda-title">Reading the Moving Image</span><span class="agenda-meta">MAS 601 · Seminar presentation · 20%</span></span>
+              <span class="agenda-state">3/5 done</span>
+            </li>
+            <li class="agenda-item" data-urgency="week">
+              <span class="agenda-day">15</span>
+              <span class="agenda-body"><span class="agenda-title">Archive, Memory, Machine</span><span class="agenda-meta">MAS 602 · Critical essay · 30%</span></span>
+              <span class="agenda-state">0/4 done</span>
+            </li>
+            <li class="agenda-item" data-urgency="later">
+              <span class="agenda-day">20</span>
+              <span class="agenda-body"><span class="agenda-title">Case Study: Studio Practice</span><span class="agenda-meta">MAS 610 · Group presentation · 25%</span></span>
+              <span class="agenda-state">2/5 done</span>
+            </li>
+          </ol>
+        </section>
+        <section class="agenda-group">
+          <h3 class="agenda-head"><span class="agenda-label">DECEMBER 2026</span><span class="agenda-total">2 posters</span></h3>
+          <ol class="agenda-list">
+            <li class="agenda-item" data-urgency="later">
+              <span class="agenda-day">04</span>
+              <span class="agenda-body"><span class="agenda-title">Thesis Proposal Draft v1</span><span class="agenda-meta">MAS 690 · Milestone</span></span>
+              <span class="agenda-state">0/4 done</span>
+            </li>
+            <li class="agenda-item" data-urgency="later">
+              <span class="agenda-day">11</span>
+              <span class="agenda-body"><span class="agenda-title">Process Journal</span><span class="agenda-meta">MAS 608 · Portfolio · 20%</span></span>
+              <span class="agenda-state">0/4 done</span>
+            </li>
+          </ol>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <div id="drawerBackdrop" class="drawer-backdrop"></div>
+
+  <aside id="drawer" class="drawer" aria-hidden="true" role="dialog" aria-modal="false" aria-labelledby="drawerTitle">
+    <div class="drawer-panel">
+      <header class="drawer-head">
+        <div class="drawer-heading">
+          <p id="drawerKicker" class="drawer-kicker">MAS 601 / SEMINAR PRESENTATION</p>
+          <h2 id="drawerTitle" class="sr-only">Poster details</h2>
+          <p class="drawer-sub"><span id="drawerDueBadge" class="drawer-due-badge">Mon 09 Nov · 23:59</span><span id="drawerProgress" class="drawer-progress">3/5 done</span></p>
+        </div>
+        <button id="drawerClose" class="btn btn-icon" type="button" aria-label="Close poster details"><span class="x-icon" aria-hidden="true"></span></button>
+      </header>
+      <form id="drawerForm" class="drawer-form" autocomplete="off" novalidate>
+        <div class="field field-wide">
+          <label class="field-label" for="drawerTitleInput">Title</label>
+          <input id="drawerTitleInput" type="text" value="Reading the Moving Image" maxlength="200" />
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label class="field-label" for="drawerTypeSelect">Type</label>
+            <div class="select-wrap">
+              <select id="drawerTypeSelect"><option>Assignment</option><option selected>Presentation</option><option>Other</option></select>
+            </div>
+          </div>
+          <div class="field">
+            <label class="field-label" for="drawerCourseInput">Course</label>
+            <input id="drawerCourseInput" type="text" value="MAS 601" maxlength="24" />
+          </div>
+        </div>
+        <div class="field field-wide">
+          <label class="field-label" for="drawerKindInput">Kind</label>
+          <input id="drawerKindInput" type="text" value="Seminar presentation" maxlength="48" />
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label class="field-label" for="drawerDueDate">Due date</label>
+            <input id="drawerDueDate" type="date" value="2026-11-09" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="drawerDueTime">Time</label>
+            <input id="drawerDueTime" type="time" value="23:59" />
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label class="field-label" for="drawerWeightInput">Weight</label>
+            <input id="drawerWeightInput" type="text" value="20%" maxlength="12" />
+          </div>
+          <div class="field">
+            <span class="field-label" id="colorGroupLabel">Paper</span>
+            <div id="drawerColorGroup" class="swatches" role="group" aria-labelledby="colorGroupLabel">
+              <button type="button" class="swatch" data-color="bone" aria-label="Bone paper" aria-pressed="false"></button>
+              <button type="button" class="swatch" data-color="blush" aria-label="Blush paper" aria-pressed="true"></button>
+              <button type="button" class="swatch" data-color="sage" aria-label="Sage paper" aria-pressed="false"></button>
+              <button type="button" class="swatch" data-color="sky" aria-label="Sky paper" aria-pressed="false"></button>
+              <button type="button" class="swatch" data-color="butter" aria-label="Butter paper" aria-pressed="false"></button>
+            </div>
+          </div>
+        </div>
+        <div class="field field-wide">
+          <label class="field-label" for="drawerBriefInput">Brief</label>
+          <textarea id="drawerBriefInput" rows="3" maxlength="4000">12-minute seminar talk on one sequence from a film of your choice. Argue how editing and sound construct meaning, then take questions.</textarea>
+        </div>
+        <div class="field field-wide">
+          <label class="field-label" for="drawerNotesInput">Notes</label>
+          <textarea id="drawerNotesInput" rows="2" maxlength="4000">Room 2B. Projector has HDMI only.</textarea>
+        </div>
+        <div class="field field-wide">
+          <label class="field-label" for="drawerLinkInput">Link</label>
+          <input id="drawerLinkInput" type="url" placeholder="https://" maxlength="2000" />
+        </div>
+        <div class="field-row field-row-tight">
+          <label class="check" for="drawerDoneToggle">
+            <input id="drawerDoneToggle" type="checkbox" />
+            <span class="check-box" aria-hidden="true"></span>
+            <span class="check-text">Mark as done</span>
+          </label>
+        </div>
+        <section class="req-section" aria-labelledby="req-heading">
+          <div class="req-head">
+            <h3 id="req-heading" class="field-label">Requirements</h3>
+            <button id="btnAddReq" class="btn btn-mini" type="button">Add requirement</button>
+          </div>
+          <ul id="drawerReqs" class="req-edit-list">
+            <li><input type="checkbox" checked aria-label="Requirement done"><input type="text" value="Pick a 2–4 min sequence" aria-label="Requirement text"><button type="button" aria-label="Remove requirement">×</button></li>
+            <li><input type="checkbox" aria-label="Requirement done"><input type="text" value="12 min talk + 3 min Q&amp;A" aria-label="Requirement text"><button type="button" aria-label="Remove requirement">×</button></li>
+            <li><input type="checkbox" aria-label="Requirement done"><input type="text" value="6–8 slides, no walls of text" aria-label="Requirement text"><button type="button" aria-label="Remove requirement">×</button></li>
+          </ul>
+        </section>
+      </form>
+      <footer class="drawer-foot">
+        <p id="drawerSaveState" class="save-state">Saved</p>
+        <div class="drawer-foot-actions">
+          <button id="btnDuplicateCard" class="btn btn-ghost" type="button">Duplicate</button>
+          <button id="btnDeleteCard" class="btn btn-danger" type="button">Delete</button>
+        </div>
+      </footer>
+    </div>
+  </aside>
+
+  <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false">
+    <div class="toast">Link copied — paste it in the class group.</div>
+    <div class="toast toast--undo">Poster deleted.<button class="toast-undo" type="button">Undo</button></div>
+  </div>
+
+  <dialog id="nameDialog" class="dialog" aria-labelledby="nameDialogTitle">
+    <form class="dialog-inner" method="dialog">
+      <p class="dialog-kicker">Who's pinning</p>
+      <h2 id="nameDialogTitle" class="dialog-title">Sign the wall</h2>
+      <p class="dialog-copy">Your name shows up next to the posters you move. No account, no email — it lives in this browser.</p>
+      <div class="field field-wide">
+        <label class="field-label" for="nameInput">Display name</label>
+        <input id="nameInput" type="text" maxlength="24" placeholder="e.g. Aye" autocomplete="nickname" />
+      </div>
+      <div class="dialog-actions">
+        <button id="nameCancel" class="btn btn-ghost" type="button">Not now</button>
+        <button id="nameSave" class="btn btn-primary" type="submit">Pin me up</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="helpDialog" class="dialog" aria-labelledby="helpTitle">
+    <div class="dialog-inner">
+      <p class="dialog-kicker">Keyboard</p>
+      <h2 id="helpTitle" class="dialog-title">Shortcuts</h2>
+      <dl class="keys">
+        <div class="key-row"><dt><kbd>N</kbd></dt><dd>New poster</dd></div>
+        <div class="key-row"><dt><kbd>/</kbd></dt><dd>Search the wall</dd></div>
+        <div class="key-row"><dt><kbd>G</kbd></dt><dd>Wall / agenda</dd></div>
+        <div class="key-row"><dt><kbd>?</kbd></dt><dd>This panel</dd></div>
+        <div class="key-row"><dt><kbd>Esc</kbd></dt><dd>Close drawer or dialog</dd></div>
+        <div class="key-row"><dt><kbd>Drag</kbd></dt><dd>Move a poster anywhere on the wall</dd></div>
+      </dl>
+      <p class="dialog-copy dialog-copy-tight">Everything is shared — this link is open to anyone who has it.</p>
+      <div class="dialog-actions">
+        <button id="helpClose" class="btn btn-primary" type="button">Got it</button>
+      </div>
+    </div>
+  </dialog>
+
+  <p class="preview-note" aria-hidden="true">PREVIEW · static · ?drawer=1 ?agenda=1 ?help=1 ?trash=1 ?trash=armed ?clean=1</p>
+</div>
+
+<!-- drag-to-delete target: app.js appends this to <body> -->
+<div id="trashZone" class="trash-zone" aria-hidden="true">
+  <span class="trash-glyph" aria-hidden="true"></span>
+  <span class="trash-label">Drop to delete</span>
+</div>
+
+<script>
+  // preview-only chrome, no app behaviour
+  const q = new URLSearchParams(location.search);
+  if (q.get('clean') === '1') {
+    document.querySelector('.preview-note')?.remove();
+    if (!q.has('toast')) document.querySelectorAll('.toast').forEach((t) => t.remove());
+  }
+  if (!q.has('toast')) document.querySelector('.toast--undo')?.remove();
+  if (q.get('clean') === '1' && !q.has('toast')) document.getElementById('toasts')?.remove();
+  if (q.get('drawer') === '1') {
+    const d = document.getElementById('drawer');
+    d.classList.add('is-open');
+    d.setAttribute('aria-hidden', 'false');
+  }
+  if (q.get('agenda') === '1' || (!q.has('view') && matchMedia('(max-width: 899px)').matches)) {
+    document.getElementById('wallView').hidden = true;
+    document.getElementById('agendaView').hidden = false;
+    document.querySelector('[data-view="wall"]').setAttribute('aria-pressed', 'false');
+    document.querySelector('[data-view="agenda"]').setAttribute('aria-pressed', 'true');
+  }
+  if (q.get('help') === '1') {
+    document.getElementById('helpDialog').showModal();
+  }
+  if (q.has('trash')) {
+    const t = document.getElementById('trashZone');
+    t.classList.add('is-visible');
+    if (q.get('trash') === 'armed') {
+      t.classList.add('is-armed');
+      t.querySelector('.trash-label').textContent = 'Release to delete';
+    }
+  }
+  const stage = document.getElementById('stage');
+  if (q.get('scrolltop')) stage.scrollTop = Number(q.get('scrolltop')) || 0;
+  if (q.get('scrollleft')) stage.scrollLeft = Number(q.get('scrollleft')) || 0;
+  if (q.get('empty') === '1') {
+    document.querySelectorAll('.poster').forEach((p) => p.remove());
+    document.querySelectorAll('.rail-item').forEach((p) => p.remove());
+    document.getElementById('wallEmpty').hidden = false;
+  }
+  if (q.get('measure') === '1') {
+    const box = (el) => {
+      const b = el.getBoundingClientRect();
+      return [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)];
+    };
+    const first = document.querySelector('.rail-item');
+    document.title = JSON.stringify({
+      vw: innerWidth,
+      rail: box(document.getElementById('deadlineRail')),
+      item: box(first),
+      stage: box(stage),
+      poster: box(document.querySelector('.poster')),
+      posters: [...document.querySelectorAll('.poster')].map(box),
+      drawer: box(document.getElementById('drawer')),
+      fontAnton: document.fonts.check('400 40px Anton'),
+      fontArchivo: document.fonts.check('800 20px Archivo'),
+      fontMono: document.fonts.check('500 12px "JetBrains Mono"'),
+    });
+  }
+</script>
+</body>
+</html>
