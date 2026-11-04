@@ -10,10 +10,12 @@ the top bar to lock again.
 
 ## Live link (share this)
 
-**https://ospeto.github.io/mas-wall/** — free GitHub Pages hosting, data in Supabase,
-works from any phone or laptop. No account, no laptop left on. Repo:
-https://github.com/Ospeto/mas-wall (updates deploy automatically on push; see
-[DEPLOY-PAGES.md](DEPLOY-PAGES.md)).
+**https://89-125-244-178.sslip.io:8443/** — runs on the Singapore-region VPS, works from
+any phone or laptop with no account. **Editing password: `MAS200`.** Viewing is open;
+adding, dragging, ticking and deleting prompt for the password once per browser session.
+
+Operations, backups and password changes: [DEPLOY-VPS.md](DEPLOY-VPS.md). The old GitHub
+Pages link now redirects here.
 
 ## Open it locally
 

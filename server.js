@@ -707,7 +707,11 @@ async function handleOp(req, res) {
     if (err instanceof HttpError) log("POST /api/op " + op + " rejected: " + err.message);
     throw err;
   }
-  log("POST /api/op " + op + " rev " + state.rev);
+  log(
+    "POST /api/op " + op + " rev " + state.rev +
+    " ip=" + (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "?") +
+    " ua=" + String(req.headers["user-agent"] || "").slice(0, 40)
+  );
   sendJson(res, 200, { ok: true, rev: state.rev });
 }
 

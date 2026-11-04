@@ -4,9 +4,9 @@ A collaborative poster wall for a Master's cohort. Everyone opens the same link,
 assignments to a shared canvas, ticks off requirements, and sees changes live. No
 accounts, no build step for the hosted build.
 
-**Live site: https://ospeto.github.io/mas-wall/** (GitHub Pages + Supabase, see
-[DEPLOY-PAGES.md](DEPLOY-PAGES.md)). This README covers the local zero-dependency Node
-server, which is still the fastest way to work on the wall offline.
+**Live site: https://89-125-244-178.sslip.io:8443/** (Node + SSE on the VPS, edit
+password `MAS200`, see [DEPLOY-VPS.md](DEPLOY-VPS.md)). This README covers the local
+zero-dependency Node server, which is the same process the VPS runs.
 
 ## Requirements
 

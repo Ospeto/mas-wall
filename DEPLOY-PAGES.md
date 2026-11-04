@@ -1,4 +1,8 @@
-# Deploy on GitHub Pages (current setup)
+# Deploy on GitHub Pages (legacy doorway)
+
+> The live board now runs on the VPS: **https://89-125-244-178.sslip.io:8443/**.
+> This Pages build redirects browsers to that URL; keep it only as a short-link doorway.
+> See [DEPLOY-VPS.md](DEPLOY-VPS.md) for the real deployment.
 
 The public site is a static copy of `public/` served by GitHub Pages, with Supabase as the
 database and realtime layer. There is no Node server in this mode; the same client detects

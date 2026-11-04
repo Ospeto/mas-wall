@@ -4,6 +4,13 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>MAS WALL — Assignments, presentations &amp; everything due</title>
+<script>
+  /* The live board runs on the Singapore VPS; the GitHub Pages copy is only a doorway. */
+  if (/(^|\.)github\.io$/.test(location.hostname)) {
+    var p = location.pathname.replace(/^\/mas-wall/, '') || '/';
+    location.replace('https://89-125-244-178.sslip.io:8443' + p + location.search + location.hash);
+  }
+</script>
 <meta name="description" content="A shared studio wall for MAS assignments and presentations. Drag posters, tick requirements, everything syncs live." />
 <meta name="color-scheme" content="dark" />
 <meta name="theme-color" content="#1B1915" />
