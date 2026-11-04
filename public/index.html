@@ -59,6 +59,10 @@
     </div>
 
     <div class="masthead-actions">
+      <button id="btnLock" class="btn btn-lock" type="button" aria-pressed="false" aria-label="Writing is locked — unlock to edit">
+        <span class="lock-icon" aria-hidden="true"></span>
+        <span class="btn-label">Locked</span>
+      </button>
       <button id="btnShare" class="btn btn-ghost" type="button">
         <span class="btn-label">Share</span>
       </button>
@@ -305,6 +309,23 @@
        =================================================================== -->
   <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
 
+  <dialog id="unlockDialog" class="dialog" aria-labelledby="unlockTitle">
+    <form class="dialog-inner" method="dialog">
+      <p class="dialog-kicker">Write access</p>
+      <h2 id="unlockTitle" class="dialog-title">Unlock editing</h2>
+      <p class="dialog-copy">Anyone with the link can view the wall. Editing, dragging and deleting need the class password.</p>
+      <div class="field field-wide">
+        <label class="field-label" for="unlockInput">Password</label>
+        <input id="unlockInput" type="password" autocomplete="current-password" placeholder="Class password" />
+      </div>
+      <p id="unlockError" class="dialog-error" role="alert" hidden>Wrong password — try again.</p>
+      <div class="dialog-actions">
+        <button id="unlockCancel" class="btn btn-ghost" type="button">Cancel</button>
+        <button id="unlockSubmit" class="btn btn-primary" type="submit">Unlock</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="nameDialog" class="dialog" aria-labelledby="nameDialogTitle">
     <form class="dialog-inner" method="dialog">
       <p class="dialog-kicker">Who's pinning</p>
@@ -333,7 +354,7 @@
         <div class="key-row"><dt><kbd>Esc</kbd></dt><dd>Close drawer or dialog</dd></div>
         <div class="key-row"><dt><kbd>Drag</kbd></dt><dd>Move a poster anywhere on the wall</dd></div>
       </dl>
-      <p class="dialog-copy dialog-copy-tight">Everything is shared — this link is open to anyone who has it.</p>
+      <p class="dialog-copy dialog-copy-tight">Viewing is open to anyone with the link; adding, editing, dragging and deleting need the class password.</p>
       <div class="dialog-actions">
         <button id="helpClose" class="btn btn-primary" type="button">Got it</button>
       </div>

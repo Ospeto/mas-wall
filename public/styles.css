@@ -2605,6 +2605,13 @@ body.drawer-open .drawer-backdrop {
   #btnShare .btn-label {
     display: none;
   }
+  #btnLock {
+    width: 32px;
+    padding: 0;
+  }
+  #btnLock .btn-label {
+    display: none;
+  }
   #btnShare::after {
     content: "↗";
     font-size: 14px;
@@ -2764,6 +2771,45 @@ body.drawer-open .drawer-backdrop {
   .view-toggle button {
     padding: 0 8px;
   }
+}
+
+/* write lock + unlock dialog -------------------------------------------- */
+.btn-lock {
+  border-style: dashed;
+}
+.btn-lock .lock-icon {
+  position: relative;
+  width: 10px;
+  height: 8px;
+  border: 1.5px solid currentColor;
+  border-radius: 1px;
+  flex: none;
+}
+.btn-lock .lock-icon::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: -6px;
+  width: 5px;
+  height: 6px;
+  border: 1.5px solid currentColor;
+  border-bottom: 0;
+  border-radius: 4px 4px 0 0;
+  transition: transform 160ms var(--ease);
+}
+.btn-lock.is-unlocked {
+  border-style: solid;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.btn-lock.is-unlocked .lock-icon::before {
+  transform: translateX(3px) rotate(22deg);
+}
+.dialog-error {
+  margin: 10px 0 0;
+  color: #ff8a6a;
+  font: 500 12px/1.4 var(--font-mono);
+  letter-spacing: 0.04em;
 }
 
 /* drawer head actions + read-only view mode ----------------------------- */

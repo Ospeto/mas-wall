@@ -32,6 +32,10 @@
   const TZ_OFFSET_MIN = 390; /* Asia/Rangoon = UTC+06:30 */
   const API_MIN_INTERVAL = 1000 / 6; /* ~6 writes/second, contract 8.11 */
   const SAVE_DEBOUNCE = 100;
+  /* write gate: SHA-256("mas-wall-write|" + password). Client-side gate only — the
+     hosted build is static, so this stops casual edits, not a determined API user. */
+  const WRITE_HASH = 'c495a495f72341c229c58861b6049b0ba5af605ccf1018372542da6554ae9275';
+  const UNLOCK_KEY = 'mas-wall:write-unlocked';
   const PRESENCE_HEARTBEAT = 25000;
   const PRESENCE_POS_THROTTLE = 150;
   const CONN_RETRY_MAX = 8000;
@@ -185,6 +189,8 @@
     conn: 'connecting',
     mode: 'unknown',
     transport: 'sse',
+    unlocked: false,
+    pendingWrite: null,
     pollForced: false,
     supabase: null,
     supaChannel: null,
@@ -216,7 +222,8 @@
     'drawerDueDate', 'drawerDueTime', 'drawerWeightInput', 'drawerBriefInput', 'drawerModeSelect',
     'drawerNotesInput', 'drawerLinkInput', 'drawerColorGroup', 'drawerDoneToggle', 'drawerForm',
     'drawerDueBadge', 'drawerProgress', 'drawerReqs', 'btnAddReq', 'btnDuplicateCard',
-    'btnDeleteCard', 'drawerSaveState', 'drawerClose', 'drawerTitle', 'drawerEditBtn', 'drawerForm'
+    'btnDeleteCard', 'drawerSaveState', 'drawerClose', 'drawerTitle', 'drawerEditBtn', 'drawerForm',
+    'btnLock', 'unlockDialog', 'unlockInput', 'unlockError', 'unlockSubmit', 'unlockCancel'
   ];
   function cacheDom() {
     for (var i = 0; i < DOM_IDS.length; i++) {
@@ -1536,13 +1543,14 @@
     if (!card) return;
     hideTrash();
     opts = opts || {};
+    if (!state.unlocked) opts.mode = 'view';
     if (!drawer.id) drawer.lastFocus = document.activeElement;
     drawer.id = card.id;
     drawer.color = card.color;
     drawer.done = !!card.done;
     fillDrawer(card);
     renderDrawerMeta(card);
-    applyDrawerMode(opts.mode === 'view' ? 'view' : 'edit');
+    applyDrawerMode((opts.mode === 'view' || !state.unlocked) ? 'view' : 'edit');
     setSaveState('idle');
     if (ui.drawer) {
       ui.drawer.dataset.cardId = card.id;
@@ -1802,7 +1810,7 @@
     }
   }
   function drawerOnInput(e) {
-    if (!drawer.id || drawer.mode === 'view') return;
+    if (!drawer.id || drawer.mode === 'view' || !state.unlocked) return;
     var target = e.target;
     if (target && target.closest && target.closest('#drawerReqs')) return;
     if (target && target === ui.drawerDoneToggle) {
@@ -2071,6 +2079,7 @@
     if (ui.wallCanvas) ui.wallCanvas.style.removeProperty('user-select');
   }
   function onPointerDown(e) {
+    if (!state.unlocked) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     if (drag.active) return;
     if (!e.target || !e.target.closest) return;
@@ -2220,7 +2229,10 @@
   /* ------------------------------ canvas events --------------------------- */
   /* phones open posters read-only first (no keyboard popping up); desktop keeps the
      fast click-to-edit path. The drawer's Edit button flips either one into edit mode. */
-  function posterOpenMode() { return state.coarse ? 'view' : 'edit'; }
+  function posterOpenMode() {
+    if (!state.unlocked) return 'view';
+    return state.coarse ? 'view' : 'edit';
+  }
 
   function onCanvasClick(e) {
     if (Date.now() < suppressClickUntil) { e.preventDefault(); e.stopPropagation(); return; }
@@ -2252,6 +2264,13 @@
     if (!target || !target.dataset || !target.dataset.reqId) return;
     var poster = target.closest('.poster');
     if (!poster) return;
+    var card = getCard(poster.dataset.id);
+    var req = card ? findReq(card, target.dataset.reqId) : null;
+    if (!state.unlocked) {
+      if (target.type === 'checkbox') target.checked = req ? !!req.done : !target.checked;
+      if (req) requestWrite(function () { toggleRequirement(card.id, req.id, !req.done); });
+      return;
+    }
     toggleRequirement(poster.dataset.id, target.dataset.reqId, !!target.checked);
   }
   function onCanvasKeydown(e) {
@@ -2430,6 +2449,70 @@
       dlg.removeAttribute('open');
     }
   }
+  /* ------------------------------ write gate ------------------------------ */
+  function sha256Hex(text) {
+    if (!window.crypto || !window.crypto.subtle) return Promise.resolve('');
+    var data = new TextEncoder().encode(text);
+    return window.crypto.subtle.digest('SHA-256', data).then(function (buf) {
+      var bytes = new Uint8Array(buf);
+      var out = '';
+      for (var i = 0; i < bytes.length; i++) out += (bytes[i] < 16 ? '0' : '') + bytes[i].toString(16);
+      return out;
+    });
+  }
+  function updateLockUi() {
+    var locked = !state.unlocked;
+    if (!ui.btnLock) return;
+    ui.btnLock.setAttribute('aria-pressed', locked ? 'false' : 'true');
+    ui.btnLock.setAttribute('aria-label', locked ? 'Writing is locked — unlock to edit' : 'Writing is unlocked — lock it');
+    ui.btnLock.classList.toggle('is-unlocked', !locked);
+    var label = ui.btnLock.querySelector('.btn-label');
+    if (label) label.textContent = locked ? 'Locked' : 'Editing';
+  }
+  function openUnlock(after) {
+    state.pendingWrite = typeof after === 'function' ? after : null;
+    if (!ui.unlockDialog) return;
+    if (ui.unlockError) ui.unlockError.hidden = true;
+    if (ui.unlockInput) ui.unlockInput.value = '';
+    openDialog(ui.unlockDialog);
+    setTimeout(function () { if (ui.unlockInput) { try { ui.unlockInput.focus(); } catch (e) {} } }, 40);
+  }
+  function closeUnlock() {
+    state.pendingWrite = null;
+    closeDialog(ui.unlockDialog);
+  }
+  function submitUnlock() {
+    var pw = ui.unlockInput ? ui.unlockInput.value : '';
+    sha256Hex('mas-wall-write|' + pw).then(function (hex) {
+      if (hex !== WRITE_HASH) {
+        if (ui.unlockError) ui.unlockError.hidden = false;
+        if (ui.unlockInput) { ui.unlockInput.focus(); ui.unlockInput.select(); }
+        return;
+      }
+      state.unlocked = true;
+      try { sessionStorage.setItem(UNLOCK_KEY, '1'); } catch (e) {}
+      updateLockUi();
+      if (ui.unlockError) ui.unlockError.hidden = true;
+      closeDialog(ui.unlockDialog);
+      toast('Editing unlocked');
+      var fn = state.pendingWrite;
+      state.pendingWrite = null;
+      if (fn) fn();
+    });
+  }
+  function lockWriting() {
+    state.unlocked = false;
+    state.pendingWrite = null;
+    try { sessionStorage.removeItem(UNLOCK_KEY); } catch (e) {}
+    updateLockUi();
+    if (drawer.id && drawer.mode === 'edit') applyDrawerMode('view');
+    toast('Writing locked');
+  }
+  function requestWrite(fn) {
+    if (state.unlocked) { fn(); return; }
+    openUnlock(fn);
+  }
+
   function openNameDialog() {
     if (!state.me) return;
     if (ui.nameInput) ui.nameInput.value = state.me.name;
@@ -2497,7 +2580,7 @@
     if (isTypingTarget(e.target)) return;
     if (drawer.id || dialogOpen(ui.nameDialog) || dialogOpen(ui.helpDialog)) return;
     var k = e.key;
-    if (k === 'n' || k === 'N') { e.preventDefault(); createCard(); return; }
+    if (k === 'n' || k === 'N') { e.preventDefault(); requestWrite(createCard); return; }
     if (k === '/') {
       e.preventDefault();
       if (ui.searchInput) { try { ui.searchInput.focus(); ui.searchInput.select(); } catch (err) { try { ui.searchInput.focus(); } catch (err2) {} } }
@@ -2532,7 +2615,17 @@
   function bindEvents() {
     document.addEventListener('keydown', onGlobalKeydown);
 
-    if (ui.btnAdd) ui.btnAdd.addEventListener('click', function (e) { e.preventDefault(); createCard(); });
+    if (ui.btnAdd) ui.btnAdd.addEventListener('click', function (e) { e.preventDefault(); requestWrite(createCard); });
+    if (ui.btnLock) ui.btnLock.addEventListener('click', function (e) {
+      e.preventDefault();
+      if (state.unlocked) lockWriting(); else openUnlock(null);
+    });
+    if (ui.unlockDialog) {
+      var unlockForm = ui.unlockDialog.querySelector('form');
+      if (unlockForm) unlockForm.addEventListener('submit', function (e) { e.preventDefault(); submitUnlock(); });
+      if (ui.unlockCancel) ui.unlockCancel.addEventListener('click', function (e) { e.preventDefault(); closeUnlock(); });
+      ui.unlockDialog.addEventListener('cancel', function () { state.pendingWrite = null; });
+    }
     if (ui.btnShare) ui.btnShare.addEventListener('click', function (e) { e.preventDefault(); shareLink(); });
     if (ui.btnHelp) ui.btnHelp.addEventListener('click', function (e) { e.preventDefault(); openHelp(); });
     if (ui.btnMe) ui.btnMe.addEventListener('click', function (e) { e.preventDefault(); openNameDialog(); });
@@ -2653,9 +2746,11 @@
     if (ui.drawerEditBtn) ui.drawerEditBtn.addEventListener('click', function (e) {
       e.preventDefault();
       if (drawer.mode !== 'view') return;
-      applyDrawerMode('edit');
-      var input = ui.drawerTitleInput;
-      if (input) { try { input.focus({ preventScroll: true }); input.select(); } catch (err) {} }
+      requestWrite(function () {
+        applyDrawerMode('edit');
+        var input = ui.drawerTitleInput;
+        if (input) { try { input.focus({ preventScroll: true }); input.select(); } catch (err) {} }
+      });
     });
     if (ui.drawerClose) ui.drawerClose.addEventListener('click', function (e) { e.preventDefault(); closeDrawer(); });
     if (ui.drawerBackdrop) ui.drawerBackdrop.addEventListener('click', function (e) { e.preventDefault(); closeDrawer(); });
@@ -3146,6 +3241,8 @@
     cacheDom();
     restoreIdentity();
     restoreView();
+    try { state.unlocked = sessionStorage.getItem(UNLOCK_KEY) === '1'; } catch (e) { state.unlocked = false; }
+    updateLockUi();
     state.outbox = loadOutbox();
     state.coarse = !!(mqCoarse && mqCoarse.matches);
     try { state.pollForced = /(?:^|[?&])poll=1(?:&|$)/.test(window.location.search); } catch (e) { state.pollForced = false; }

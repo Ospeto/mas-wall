@@ -1,8 +1,12 @@
 # MAS WALL — start here
 
 A shared wall of assignments and presentations. Each poster shows its deadline, how many
-days are left, the assignment brief, and a tickable requirement checklist. Anyone with the
-link can add, edit, drag and tick — changes sync live.
+days are left, the assignment brief, and a tickable requirement checklist.
+
+**Viewing is open to anyone with the link. Editing is locked behind the class password
+(`MAS200`).** Tap a poster to read it, press **Edit**, enter the password once per browser
+session, and everything unlocks — add, drag, tick, delete. Press the **LOCKED** button in
+the top bar to lock again.
 
 ## Live link (share this)
 

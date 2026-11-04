@@ -106,11 +106,16 @@ The server generates an id when you omit one.
 
 ## No auth, by design
 
-Anyone with the link can add, edit, move and delete posters — that is the product, not a
-bug. On a trusted classroom Wi-Fi that is fine. On the open internet treat the link as a
-shared editable document: share it deliberately, and restore demo content by re-running
-`supabase/seed.sql` (Supabase mode) or deleting `data/state.json` (local mode). Put it
-behind a VPN or a password-protected proxy if you need stricter access.
+The hosted build shows the wall read-only and asks for the class password (`MAS200`)
+before anyone can add, edit, drag or delete a poster. That gate is implemented in the
+browser (SHA-256 hash in `public/app.js`, unlock remembered per browser session), which
+is enough for a classroom but is **not** server-side enforcement: someone with developer
+tools and the Supabase publishable key could still write via the API. The local Node
+server's `/api/op` endpoint is likewise open on your local network.
+
+Anyone with the link can view, so share it deliberately. Restore demo content by
+re-running `supabase/seed.sql` (Supabase mode) or deleting `data/state.json` (local mode).
+Put it behind a VPN or password-protected proxy if you need stronger access control.
 
 ## Deploy
 
