@@ -17,15 +17,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%231B1915'/%3E%3Crect x='5' y='5' width='22' height='22' fill='%23E8451F'/%3E%3Crect x='9' y='9' width='14' height='14' fill='%23171410'/%3E%3C/svg%3E" />
 <link rel="preload" href="fonts/anton-latin-400.woff2" as="font" type="font/woff2" crossorigin />
 <link rel="preload" href="fonts/archivo-latin-var.woff2" as="font" type="font/woff2" crossorigin />
-<!-- speed: open the TLS connection to Supabase while the HTML/CSS are still parsing,
-     and warm the Supabase client download so it is already in cache when boot needs it -->
-<link rel="preconnect" href="https://vxzglftvusjuqnprveup.supabase.co" crossorigin />
-<link rel="preload" href="vendor/supabase-js.min.js" as="script" />
-<!-- Speed: inline the (public-safe) Supabase project config so the first data request
-     does not wait for an extra config round trip. Keep in sync with
-     public/supabase-config.json (that file remains the fallback and the single source
-     for other deployments). -->
-<script>window.MAS_SUPABASE_CONFIG = {"url":"https://vxzglftvusjuqnprveup.supabase.co","anonKey":"sb_publishable_dPhC6doZHBuNXdrub2Qbig_2N9BFDjh"};</script>
+<link rel="preload" href="fonts/jetbrains-mono-latin-var.woff2" as="font" type="font/woff2" crossorigin />
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>

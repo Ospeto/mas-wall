@@ -2773,6 +2773,18 @@ body.drawer-open .drawer-backdrop {
   }
 }
 
+/* agenda empty state ----------------------------------------------------- */
+.agenda-empty {
+  margin: 32px auto 0;
+  max-width: 460px;
+  padding: 24px 22px;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 3px;
+  color: var(--text-dim);
+  font: 400 14px/1.5 var(--font-ui);
+  text-align: center;
+}
+
 /* write lock + unlock dialog -------------------------------------------- */
 .btn-lock {
   border-style: dashed;

@@ -31,11 +31,10 @@
   const TRASH_ARM_MARGIN = 24;
   const TZ_OFFSET_MIN = 390; /* Asia/Rangoon = UTC+06:30 */
   const API_MIN_INTERVAL = 1000 / 6; /* ~6 writes/second, contract 8.11 */
-  const SAVE_DEBOUNCE = 100;
-  /* write gate: SHA-256("mas-wall-write|" + password). Client-side gate only — the
-     hosted build is static, so this stops casual edits, not a determined API user. */
-  const WRITE_HASH = 'c495a495f72341c229c58861b6049b0ba5af605ccf1018372542da6554ae9275';
-  const UNLOCK_KEY = 'mas-wall:write-unlocked';
+  const SAVE_DEBOUNCE = 250;
+  /* Write access is verified by the server (POST api/auth/unlock) and the resulting
+     short-lived token is what authorizes POST api/op. Only the token is cached. */
+  const UNLOCK_KEY = 'mas-wall:write-token';
   const PRESENCE_HEARTBEAT = 25000;
   const PRESENCE_POS_THROTTLE = 150;
   const CONN_RETRY_MAX = 8000;
@@ -190,7 +189,7 @@
     mode: 'unknown',
     transport: 'sse',
     unlocked: false,
-    writePassword: null,
+    writeToken: null,
     pendingWrite: null,
     pollForced: false,
     supabase: null,
@@ -307,7 +306,7 @@
     return node;
   }
   function trashBlocked() {
-    return !!(drawer.id || dialogOpen(ui.nameDialog) || dialogOpen(ui.helpDialog));
+    return !!(drawer.id || dialogOpen(ui.unlockDialog) || dialogOpen(ui.nameDialog) || dialogOpen(ui.helpDialog));
   }
   function showTrash() {
     if (trashBlocked()) return;
@@ -441,7 +440,7 @@
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'x-write-password': state.writePassword || ''
+          'x-write-token': state.writeToken || ''
         },
         body: JSON.stringify(op)
       }).then(function (res) {
@@ -454,7 +453,7 @@
     }).then(function (r) {
       if (r.res.status === 401) {
         state.unlocked = false;
-        state.writePassword = null;
+        state.writeToken = null;
         try { sessionStorage.removeItem(UNLOCK_KEY); } catch (e) {}
         updateLockUi();
         toast('Write password required — unlock again');
@@ -544,6 +543,9 @@
     heartbeatTimer = setInterval(function () { schedulePresence(true); }, ms || PRESENCE_HEARTBEAT);
   }
   function startHeartbeat() { restartHeartbeat(PRESENCE_HEARTBEAT); }
+  function stopHeartbeat() {
+    if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = 0; }
+  }
 
   /* ------------------------ transport: HTTP SSE + polling ------------------- */
   let es = null;
@@ -1208,8 +1210,24 @@
     if (typeof count !== 'number') count = visibleCards().length;
     var hasAny = state.cards.length > 0;
     empty.hidden = count > 0;
-    empty.dataset.reason = hasAny ? 'filtered' : 'none';
+    var filtered = hasAny && count === 0;
+    empty.dataset.reason = filtered ? 'filtered' : 'none';
     empty.dataset.count = String(count);
+    var kicker = empty.querySelector('.wall-empty-kicker');
+    var title = empty.querySelector('.wall-empty-title');
+    var copy = empty.querySelector('.wall-empty-copy');
+    var hint = empty.querySelector('.wall-empty-hint');
+    if (filtered) {
+      if (kicker) kicker.textContent = 'No matches';
+      if (title) title.textContent = 'Nothing matches.';
+      if (copy) copy.textContent = 'Clear the search or switch the filters to bring the posters back — nothing has been deleted.';
+      if (hint) hint.hidden = true;
+    } else {
+      if (kicker) kicker.textContent = 'Nothing pinned yet';
+      if (title) title.textContent = 'Bare wall.';
+      if (copy) copy.textContent = 'Pin your first assignment or presentation. Drag it anywhere, tick the requirements as you go — everyone on the link sees it move.';
+      if (hint) hint.hidden = false;
+    }
   }
   function renderRail() {
     var rail = ui.deadlineRail;
@@ -1220,6 +1238,8 @@
       var card = state.cards[i];
       var t = dueMs(card);
       if (card.done || !isFinite(t)) continue;
+      /* the strip is "NEXT UP": overdue cards stay on the wall/agenda, not here */
+      if (dayDelta(t, now) < 0) continue;
       upcoming.push(card);
     }
     upcoming.sort(function (a, b) { return dueMs(a) - dueMs(b); });
@@ -2463,16 +2483,6 @@
     }
   }
   /* ------------------------------ write gate ------------------------------ */
-  function sha256Hex(text) {
-    if (!window.crypto || !window.crypto.subtle) return Promise.resolve('');
-    var data = new TextEncoder().encode(text);
-    return window.crypto.subtle.digest('SHA-256', data).then(function (buf) {
-      var bytes = new Uint8Array(buf);
-      var out = '';
-      for (var i = 0; i < bytes.length; i++) out += (bytes[i] < 16 ? '0' : '') + bytes[i].toString(16);
-      return out;
-    });
-  }
   function updateLockUi() {
     var locked = !state.unlocked;
     if (!ui.btnLock) return;
@@ -2494,17 +2504,42 @@
     state.pendingWrite = null;
     closeDialog(ui.unlockDialog);
   }
+  function unlockError(message) {
+    if (ui.unlockError) {
+      ui.unlockError.textContent = message;
+      ui.unlockError.hidden = false;
+    }
+    if (ui.unlockInput) { ui.unlockInput.focus(); ui.unlockInput.select(); }
+  }
   function submitUnlock() {
+    if (state.mode !== 'http') {
+      unlockError('Editing needs the live board — open the VPS link, not a static copy.');
+      return;
+    }
     var pw = ui.unlockInput ? ui.unlockInput.value : '';
-    sha256Hex('mas-wall-write|' + pw).then(function (hex) {
-      if (hex !== WRITE_HASH) {
-        if (ui.unlockError) ui.unlockError.hidden = false;
-        if (ui.unlockInput) { ui.unlockInput.focus(); ui.unlockInput.select(); }
+    if (!pw) { unlockError('Enter the class password.'); return; }
+    if (ui.unlockSubmit) ui.unlockSubmit.disabled = true;
+    fetch('api/auth/unlock', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: pw })
+    }).then(function (res) {
+      return res.text().then(function (text) {
+        var body = null;
+        try { body = text ? JSON.parse(text) : null; } catch (e) { body = null; }
+        return { ok: res.ok, status: res.status, body: body };
+      });
+    }).then(function (r) {
+      if (ui.unlockSubmit) ui.unlockSubmit.disabled = false;
+      if (!r.ok || !r.body || !r.body.token) {
+        var msg = r.status === 429 ? 'Too many attempts — wait a minute.' : 'Wrong password — try again.';
+        if (r.status === 503) msg = 'Editing is not configured on this server.';
+        unlockError(msg);
         return;
       }
       state.unlocked = true;
-      state.writePassword = pw;
-      try { sessionStorage.setItem(UNLOCK_KEY, pw); } catch (e) {}
+      state.writeToken = r.body.token;
+      try { sessionStorage.setItem(UNLOCK_KEY, r.body.token); } catch (e) {}
       updateLockUi();
       if (ui.unlockError) ui.unlockError.hidden = true;
       closeDialog(ui.unlockDialog);
@@ -2512,11 +2547,14 @@
       var fn = state.pendingWrite;
       state.pendingWrite = null;
       if (fn) fn();
+    }).catch(function () {
+      if (ui.unlockSubmit) ui.unlockSubmit.disabled = false;
+      unlockError('Could not reach the server — check your connection.');
     });
   }
   function lockWriting() {
     state.unlocked = false;
-    state.writePassword = null;
+    state.writeToken = null;
     state.pendingWrite = null;
     try { sessionStorage.removeItem(UNLOCK_KEY); } catch (e) {}
     updateLockUi();
@@ -2566,6 +2604,7 @@
       suppressClickUntil = Date.now() + 350;
       return;
     }
+    if (dialogOpen(ui.unlockDialog)) { closeUnlock(); return; }
     if (dialogOpen(ui.nameDialog)) { closeDialog(ui.nameDialog); return; }
     if (dialogOpen(ui.helpDialog)) { closeDialog(ui.helpDialog); return; }
     if (drawer.id) { closeDrawer(); return; }
@@ -2593,7 +2632,7 @@
     if (e.defaultPrevented) return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (isTypingTarget(e.target)) return;
-    if (drawer.id || dialogOpen(ui.nameDialog) || dialogOpen(ui.helpDialog)) return;
+    if (drawer.id || dialogOpen(ui.unlockDialog) || dialogOpen(ui.nameDialog) || dialogOpen(ui.helpDialog)) return;
     var k = e.key;
     if (k === 'n' || k === 'N') { e.preventDefault(); requestWrite(createCard); return; }
     if (k === '/') {
@@ -2809,7 +2848,8 @@
       if (state.mode === 'http' || state.mode === 'offline') setConn('offline');
     });
     document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState !== 'visible') return;
+      if (document.visibilityState !== 'visible') { stopHeartbeat(); return; }
+      startHeartbeat();
       if (state.mode === 'offline') return;
       if (state.mode === 'supabase') { scheduleSupaReconnect(); schedulePresence(true); return; }
       if (state.transport === 'polling') schedulePoll(0);
@@ -3257,12 +3297,12 @@
     restoreIdentity();
     restoreView();
     try {
-      var savedPw = sessionStorage.getItem(UNLOCK_KEY);
-      state.unlocked = !!savedPw;
-      state.writePassword = savedPw || null;
+      var savedToken = sessionStorage.getItem(UNLOCK_KEY);
+      state.unlocked = !!savedToken;
+      state.writeToken = savedToken || null;
     } catch (e) {
       state.unlocked = false;
-      state.writePassword = null;
+      state.writeToken = null;
     }
     updateLockUi();
     state.outbox = loadOutbox();

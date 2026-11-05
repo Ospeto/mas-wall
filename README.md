@@ -4,8 +4,8 @@ A collaborative poster wall for a Master's cohort. Everyone opens the same link,
 assignments to a shared canvas, ticks off requirements, and sees changes live. No
 accounts, no build step for the hosted build.
 
-**Live site: https://mas.wavypremium.xyz:8443/** (Node + SSE on the VPS, edit
-password `MAS200`, see [DEPLOY-VPS.md](DEPLOY-VPS.md)). This README covers the local
+**Live site: https://mas.wavypremium.xyz:8443/** (Node + SSE on the VPS; the class
+password is shared privately, see [DEPLOY-VPS.md](DEPLOY-VPS.md)). This README covers the
 zero-dependency Node server, which is the same process the VPS runs.
 
 ## Requirements
@@ -78,7 +78,8 @@ JSON in, JSON out. Failures return `{ok:false, error:"message"}`.
 | GET | `/api/state` | Full state: `{rev, course, cards}` |
 | GET | `/api/health` | Health and counts: `{ok, rev, cards, clients}` |
 | GET | `/api/events` | SSE stream: `hello` event, then `card.upsert`, `card.delete`, `course.update`, `presence`; heartbeat comment every 20 s |
-| POST | `/api/op` | One operation: `card.upsert` (card object), `card.delete` (id), or `course.update` (course object). Returns `{ok:true, rev}` |
+| POST | `/api/auth/unlock` | Body `{password}`. Verifies the write password server-side and returns a 12-hour `{token}` |
+| POST | `/api/op` | One operation: `card.upsert`, `card.delete` or `course.update`. Requires `x-write-token` (from unlock). Returns `{ok:true, rev}` |
 | POST | `/api/presence` | Publish a user object `{id, name, color, x, y, cardId}`. Returns 204 |
 
 Add a card:
@@ -104,18 +105,25 @@ The server generates an id when you omit one.
 - Requirement text up to 200 characters, at most 40 requirements per card.
 - Request bodies capped at 1.5 MB (`413` beyond that); malformed JSON gets `400`.
 
-## No auth, by design
+## Viewing is public, writing is password-protected
 
-The hosted build shows the wall read-only and asks for the class password (`MAS200`)
-before anyone can add, edit, drag or delete a poster. That gate is implemented in the
-browser (SHA-256 hash in `public/app.js`, unlock remembered per browser session), which
-is enough for a classroom but is **not** server-side enforcement: someone with developer
-tools and the Supabase publishable key could still write via the API. The local Node
-server's `/api/op` endpoint is likewise open on your local network.
+Anyone with the link can view the wall. Adding, editing, dragging and deleting require the
+class password, which is verified **on the server** (`POST /api/auth/unlock`) and exchanged
+for a short-lived token; only the token is stored in the browser. The password itself is
+never written into the repo, docs or browser storage.
 
-Anyone with the link can view, so share it deliberately. Restore demo content by
-re-running `supabase/seed.sql` (Supabase mode) or deleting `data/state.json` (local mode).
-Put it behind a VPN or password-protected proxy if you need stronger access control.
+The password hash comes from `WRITE_HASH` in the environment. For local development, set:
+
+```bash
+WRITE_HASH=$(node -e "console.log(require('crypto').createHash('sha256').update('YOUR-PASSWORD').digest('hex'))")
+```
+
+If `WRITE_HASH` is unset, every write is rejected with `401`. Rotate the password by
+updating that env var and restarting the server (all tokens are invalidated).
+
+Anyone with the link can view, so share it deliberately. Restore demo content by deleting
+`data/state.json` (and restarting) or via the VPS backup documented in
+[DEPLOY-VPS.md](DEPLOY-VPS.md).
 
 ## Deploy
 
@@ -127,12 +135,12 @@ on deploy or restart, so `data/state.json` is lost. Mount a persistent volume at
 `data/` (Fly volumes, Railway volumes, Render disks) to keep state. Otherwise treat the
 deployment as a demo that reseeds from `data/seed.json`.
 
-### Permanent free link: Vercel + Supabase
+### Permanent link: the VPS
 
-The recommended way to share outside the room is the static build in `public/` with
-Supabase as the database and realtime layer. No Node server to host, no laptop to keep
-awake, and state survives deploys. Step-by-step: [DEPLOY-SUPABASE.md](DEPLOY-SUPABASE.md).
-The same client auto-detects the mode; local server mode above still works unchanged.
+The live board runs on a small VPS with this same Node process and SSE (see
+[DEPLOY-VPS.md](DEPLOY-VPS.md)): systemd service, Caddy TLS, hourly state backups, and
+server-side write authentication. The old Vercel + Supabase setup is **legacy**: its
+config has been removed from the repo and the live board no longer uses it.
 
 ## Public link without a host
 
@@ -148,8 +156,8 @@ or:
 npx localtunnel --port 4321
 ```
 
-Both print a public URL that changes each run, and SSE works through both. Anyone with
-the URL can edit, so share deliberately.
+Both print a public URL that changes each run, and SSE works through both. Editing still
+needs the class password, and the password travels over the tunnel's HTTPS.
 
 ## Troubleshooting
 
@@ -167,3 +175,7 @@ the URL can edit, so share deliberately.
 | `PORT` | `4321` | HTTP port. |
 | `HOST` | `0.0.0.0` | Bind address. Set `127.0.0.1` for local-only. |
 | `HEARTBEAT_MS` | `20000` | SSE heartbeat interval in ms; mainly a test hook. |
+| `WRITE_HASH` | *(unset)* | SHA-256 hex of the write password. Unset = all writes rejected. |
+| `MAX_SSE_CLIENTS` | `200` | Global SSE connection cap. |
+| `MAX_SSE_PER_IP` | `8` | SSE connections allowed per client IP. |
+| `MAX_PRESENCE` | `200` | Presence entries cap. |

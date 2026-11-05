@@ -1,4 +1,7 @@
-# Deploy on GitHub Pages (legacy doorway)
+# GitHub Pages (legacy doorway only)
+
+> Live board: **https://mas.wavypremium.xyz:8443/** (VPS). This Pages build only redirects
+> there. Do not use it as a separate board.
 
 > The live board now runs on the VPS: **https://89-125-244-178.sslip.io:8443/**.
 > This Pages build redirects browsers to that URL; keep it only as a short-link doorway.

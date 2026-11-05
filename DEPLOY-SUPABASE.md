@@ -1,4 +1,9 @@
-# Deploy MAS WALL on Vercel + Supabase
+# Deploy MAS WALL on Vercel + Supabase (LEGACY — not used by the live board)
+
+> The live board now runs on the VPS (Node + SSE): see [DEPLOY-VPS.md](DEPLOY-VPS.md).
+> Supabase config has been removed from this repo and the live server no longer uses it.
+> This guide remains only as a reference for a serverless fork; the Supabase project
+> should be paused/deleted so its old public anon key cannot write anywhere.
 
 This is the **hosted** mode: a permanent, shareable link that works from anywhere, with
 state stored in Supabase (Postgres + Realtime). The local `node server.js` mode is still

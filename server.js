@@ -40,21 +40,74 @@ const MAX_TEXT = 4000;
 const MAX_REQ_TEXT = 200;
 const MAX_REQS = 40;
 
-const SAVE_DEBOUNCE_MS = 250;
+const SAVE_DEBOUNCE_MS = 500;
 const SSE_HEARTBEAT_MS = toPositiveInt(process.env.HEARTBEAT_MS, 20000);
 const PRESENCE_TTL_MS = 75000;
 const PRESENCE_SWEEP_MS = 30000;
-const PRESENCE_THROTTLE_MS = 100; // hard ceiling: at most 10 presence broadcasts per second
+const PRESENCE_THROTTLE_MS = 250; // at most 4 presence broadcasts per second
+const MAX_SSE_CLIENTS = toPositiveInt(process.env.MAX_SSE_CLIENTS, 200);
+const MAX_SSE_PER_IP = toPositiveInt(process.env.MAX_SSE_PER_IP, 8);
+const MAX_PRESENCE = toPositiveInt(process.env.MAX_PRESENCE, 200);
+const AUTH_TTL_MS = 12 * 60 * 60 * 1000;
+const MAX_AUTH_TOKENS = 1000;
 
 const DEBUG = process.env.DEBUG === "1" || process.env.MAS_WALL_DEBUG === "1";
 
-// Write access password: the browser unlocks locally, and every write must carry the
-// matching x-write-password header. Only the SHA-256 hash is kept here.
-const WRITE_HASH = process.env.WRITE_HASH || "5a0e2a5671c5f76a04a307d6a5e41bb2dc84742b8211f06889897fcb4c943ebc";
-function writePasswordOk(req) {
-  const supplied = req.headers["x-write-password"];
-  if (typeof supplied !== "string" || !supplied) return false;
-  return crypto.createHash("sha256").update(supplied).digest("hex") === WRITE_HASH;
+// Write access is checked on the server. The password hash comes from the environment
+// (systemd Environment=WRITE_HASH=...); no credential is committed to the repo.
+const WRITE_HASH = String(process.env.WRITE_HASH || "").trim().toLowerCase();
+function sha256Hex(text) {
+  return crypto.createHash("sha256").update(text).digest("hex");
+}
+function hashEquals(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(a, "hex"), Buffer.from(b, "hex"));
+}
+function passwordOk(password) {
+  if (!WRITE_HASH || typeof password !== "string" || !password) return false;
+  return hashEquals(sha256Hex(password), WRITE_HASH);
+}
+
+const authTokens = new Map(); // token -> expiresAt ms
+
+function issueAuthToken() {
+  const token = crypto.randomBytes(24).toString("hex");
+  authTokens.set(token, Date.now() + AUTH_TTL_MS);
+  if (authTokens.size > MAX_AUTH_TOKENS) {
+    const oldest = authTokens.keys().next().value;
+    if (oldest) authTokens.delete(oldest);
+  }
+  return token;
+}
+function tokenOk(token) {
+  if (typeof token !== "string" || !token) return false;
+  const expires = authTokens.get(token);
+  if (!expires) return false;
+  if (expires <= Date.now()) {
+    authTokens.delete(token);
+    return false;
+  }
+  return true;
+}
+function writeAuthOk(req) {
+  return tokenOk(req.headers["x-write-token"]) || passwordOk(req.headers["x-write-password"]);
+}
+function clientIp(req) {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded) return forwarded.split(",")[0].trim();
+  return req.socket.remoteAddress || "unknown";
+}
+const rateBuckets = new Map(); // key -> { count, resetAt }
+function rateLimit(key, limit, windowMs) {
+  const now = Date.now();
+  const bucket = rateBuckets.get(key);
+  if (!bucket || bucket.resetAt <= now) {
+    rateBuckets.set(key, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (bucket.count >= limit) return false;
+  bucket.count += 1;
+  return true;
 }
 
 // Client-generated ids are opaque tokens; keep them verbatim (1-64 printable chars)
@@ -326,7 +379,7 @@ function markStateChanged() {
 
 async function writeStateFile() {
   await fsp.mkdir(DATA_DIR, { recursive: true });
-  const payload = JSON.stringify(state, null, 2);
+  const payload = JSON.stringify(state);
   const tmp = path.join(DATA_DIR, ".state-" + process.pid + "-" + crypto.randomBytes(4).toString("hex") + ".tmp");
   const handle = await fsp.open(tmp, "w");
   try {
@@ -424,15 +477,12 @@ async function loadState() {
 
 // ---------------------------------------------------------------- SSE
 
-function sseSend(client, payload, eventName) {
+function sseWriteFrame(client, frame) {
   const res = client.res;
   if (res.writableEnded || res.destroyed) {
     dropClient(client, "closed");
     return false;
   }
-  let frame = "";
-  if (eventName) frame += "event: " + eventName + "\n";
-  frame += "data: " + JSON.stringify(payload) + "\n\n";
   try {
     res.write(frame);
     return true;
@@ -442,8 +492,18 @@ function sseSend(client, payload, eventName) {
   }
 }
 
+function sseSend(client, payload, eventName) {
+  let frame = "";
+  if (eventName) frame += "event: " + eventName + "\n";
+  frame += "data: " + JSON.stringify(payload) + "\n\n";
+  return sseWriteFrame(client, frame);
+}
+
 function broadcast(payload) {
-  for (const client of Array.from(sseClients)) sseSend(client, payload);
+  if (sseClients.size === 0) return;
+  // serialize once, then fan the same frame out to every client
+  const frame = "data: " + JSON.stringify(payload) + "\n\n";
+  for (const client of Array.from(sseClients)) sseWriteFrame(client, frame);
 }
 
 function dropClient(client, reason) {
@@ -458,6 +518,17 @@ function dropClient(client, reason) {
 }
 
 function openEventStream(req, res) {
+  const ip = clientIp(req);
+  if (sseClients.size >= MAX_SSE_CLIENTS) {
+    sendJson(res, 503, { ok: false, error: "too many live connections" });
+    return;
+  }
+  let ipCount = 0;
+  for (const client of sseClients) if (client.ip === ip) ipCount += 1;
+  if (ipCount >= MAX_SSE_PER_IP) {
+    sendJson(res, 503, { ok: false, error: "too many live connections from this address" });
+    return;
+  }
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache, no-transform",
@@ -469,7 +540,7 @@ function openEventStream(req, res) {
     res.socket.setNoDelay(true);
     res.socket.setTimeout(0);
   }
-  const client = { id: ++clientSeq, res: res, since: Date.now() };
+  const client = { id: ++clientSeq, res: res, since: Date.now(), ip: ip };
   sseClients.add(client);
   // hello carries the full snapshot, so a fresh tab renders without a second request
   sseSend(client, { type: "hello", state: publicState(), users: presenceUsers() }, "hello");
@@ -679,8 +750,11 @@ function updateCourse(rawCourse) {
 }
 
 async function handleOp(req, res) {
-  if (!writePasswordOk(req)) {
+  if (!writeAuthOk(req)) {
     log("POST /api/op rejected: write password required");
+    if (!rateLimit("opfail:" + clientIp(req), 12, 60000)) {
+      throw new HttpError(429, "too many failed attempts");
+    }
     throw new HttpError(401, "write password required");
   }
   const body = await readJsonBody(req);
@@ -715,13 +789,31 @@ async function handleOp(req, res) {
   sendJson(res, 200, { ok: true, rev: state.rev });
 }
 
+async function handleUnlock(req, res) {
+  if (!WRITE_HASH) throw new HttpError(503, "write password is not configured");
+  if (!rateLimit("unlock:" + clientIp(req), 8, 60000)) {
+    throw new HttpError(429, "too many attempts, try again in a minute");
+  }
+  const body = await readJsonBody(req);
+  const password = body && typeof body.password === "string" ? body.password : "";
+  if (!passwordOk(password)) throw new HttpError(401, "wrong password");
+  const token = issueAuthToken();
+  log("POST /api/auth/unlock ok ip=" + clientIp(req));
+  sendJson(res, 200, { ok: true, token: token, expiresAt: Date.now() + AUTH_TTL_MS });
+}
+
 async function handlePresence(req, res) {
+  const ip = clientIp(req);
+  if (!rateLimit("presence:" + ip, 30, 10000)) throw new HttpError(429, "slow down");
   const body = await readJsonBody(req);
   const user = body && typeof body === "object" && !Array.isArray(body) ? body.user : null;
   if (!user || typeof user !== "object" || Array.isArray(user)) {
     throw new HttpError(400, "user must be an object");
   }
   if (!isValidId(user.id)) throw new HttpError(400, "user.id must be a string");
+  if (!presence.has(user.id) && presence.size >= MAX_PRESENCE) {
+    throw new HttpError(429, "too many people online");
+  }
   presence.set(user.id, {
     id: user.id,
     name: str(user.name, 40) || "Guest",
@@ -800,11 +892,31 @@ async function serveStatic(pathname, req, res) {
   const extension = path.extname(filePath).toLowerCase();
   const contentType = MIME_TYPES[extension] || "application/octet-stream";
   const cache = NO_CACHE_EXT.indexOf(extension) >= 0 ? "no-cache" : "public, max-age=86400";
+  const etag = 'W/"' + stats.size.toString(16) + "-" + Math.floor(stats.mtimeMs).toString(16) + '"';
+  const lastModified = stats.mtime.toUTCString();
+  const ifNoneMatch = req.headers["if-none-match"];
+  let fresh = false;
+  if (typeof ifNoneMatch === "string" && ifNoneMatch) {
+    fresh = ifNoneMatch.split(",").some(function (tag) { return tag.trim() === etag || tag.trim() === "*"; });
+  } else if (typeof req.headers["if-modified-since"] === "string") {
+    const since = Date.parse(req.headers["if-modified-since"]);
+    if (Number.isFinite(since)) fresh = Math.floor(stats.mtimeMs / 1000) <= Math.floor(since / 1000);
+  }
+  if (fresh) {
+    res.writeHead(304, {
+      "Cache-Control": cache,
+      "ETag": etag,
+      "Last-Modified": lastModified,
+    });
+    res.end();
+    return;
+  }
   res.writeHead(200, {
     "Content-Type": contentType,
     "Content-Length": stats.size,
     "Cache-Control": cache,
-    "Last-Modified": stats.mtime.toUTCString(),
+    "ETag": etag,
+    "Last-Modified": lastModified,
     "X-Content-Type-Options": "nosniff",
   });
   if (req.method === "HEAD") {
@@ -831,13 +943,34 @@ async function handleApi(req, res, pathname) {
     return;
   }
   if (pathname === "/api/health") {
-    if (!requireMethod(req, res, "GET")) return;
-    sendJson(res, 200, { ok: true, rev: state.rev, cards: state.cards.length, clients: sseClients.size });
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      res.setHeader("Allow", "GET, HEAD");
+      sendJson(res, 405, { ok: false, error: "method not allowed" });
+      return;
+    }
+    const health = { ok: true, rev: state.rev, cards: state.cards.length, clients: sseClients.size };
+    if (req.method === "HEAD") {
+      const body = JSON.stringify(health);
+      res.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Length": Buffer.byteLength(body),
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      });
+      res.end();
+      return;
+    }
+    sendJson(res, 200, health);
     return;
   }
   if (pathname === "/api/events") {
     if (!requireMethod(req, res, "GET")) return;
     openEventStream(req, res);
+    return;
+  }
+  if (pathname === "/api/auth/unlock") {
+    if (!requireMethod(req, res, "POST")) return;
+    await handleUnlock(req, res);
     return;
   }
   if (pathname === "/api/op") {
