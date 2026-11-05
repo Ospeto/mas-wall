@@ -1585,10 +1585,9 @@ select option {
 }
 @media (pointer: coarse) {
   .poster {
-    /* Long-press lifts a poster into drag mode (app.js); without this the first move
-       turns into a scroll and fires pointercancel, making drag-to-trash impossible on
-       touch. Panning the wall still works from the canvas background between posters. */
-    touch-action: none;
+    /* Normal swipes scroll the page/wall. A long-press "lifts" the poster; app.js then
+       prevents the next touchmove so the drag (and the bin) can take over. */
+    touch-action: pan-y;
   }
   .btn,
   .btn-icon,

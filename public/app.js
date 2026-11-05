@@ -2154,6 +2154,12 @@
       schedulePresence(true);
     }, TRASH_LONG_PRESS);
   }
+  /* Once a long-press has lifted a poster, keep the gesture as a drag instead of
+     letting the browser start a scroll (which would fire pointercancel). */
+  function onTouchMoveGuard(e) {
+    if (drag.active && drag.lifted && e.cancelable) e.preventDefault();
+  }
+
   function onPointerMove(e) {
     if (ui.wallCanvas) {
       var rect = ui.wallCanvas.getBoundingClientRect();
@@ -2762,6 +2768,7 @@
       canvas.addEventListener('scroll', function () { schedulePresence(false); }, { passive: true });
     }
     document.addEventListener('pointermove', onPointerMove);
+    document.addEventListener('touchmove', onTouchMoveGuard, { passive: false });
     document.addEventListener('pointerup', onPointerUp);
     document.addEventListener('pointercancel', onPointerCancel);
     window.addEventListener('scroll', function () { schedulePresence(false); }, { passive: true });
