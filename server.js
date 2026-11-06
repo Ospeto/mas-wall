@@ -1027,7 +1027,15 @@ async function handleRequest(req, res) {
 // ---------------------------------------------------------------- startup
 
 function lanAddress() {
-  const interfaces = os.networkInterfaces();
+  /* Sandboxed hosts (systemd hardening, containers) can deny the interface
+     enumeration with ERR_SYSTEM_ERROR; the banner is cosmetic, so fall back
+     to the local URL instead of throwing an uncaught exception on boot. */
+  let interfaces = {};
+  try {
+    interfaces = os.networkInterfaces() || {};
+  } catch (err) {
+    return null;
+  }
   const found = [];
   for (const name of Object.keys(interfaces)) {
     for (const info of interfaces[name] || []) {
