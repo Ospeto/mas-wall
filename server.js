@@ -114,7 +114,7 @@ function rateLimit(key, limit, windowMs) {
 // so an echo from the server can never fork a poster into a duplicate.
 const ID_RE = /^[!-~]{1,64}$/;
 const CARD_TYPES = ["assignment", "presentation", "other"];
-const CARD_COLORS = ["bone", "blush", "sage", "sky", "butter"];
+const CARD_COLORS = ["bone", "blush", "sage", "sky", "butter", "kraft", "lilac"];
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",

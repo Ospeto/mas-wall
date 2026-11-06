@@ -38,7 +38,7 @@
   const PRESENCE_HEARTBEAT = 25000;
   const PRESENCE_POS_THROTTLE = 150;
   const CONN_RETRY_MAX = 8000;
-  const MAX_POSTER_REQS = 8;
+  const MAX_POSTER_REQS = 3;
   const STATE_TIMEOUT = 2500;
   const POLL_INTERVAL = 2500;
   const POLL_INTERVAL_OFFLINE = 5000;
@@ -50,7 +50,7 @@
   const SUPABASE_RECONNECT_MS = 5000;
   const SUPABASE_VENDOR_TIMEOUT = 8000;
 
-  const COLORS = ['bone', 'blush', 'sage', 'sky', 'butter'];
+  const COLORS = ['bone', 'blush', 'sage', 'sky', 'butter', 'kraft', 'lilac'];
   const TYPES = ['assignment', 'presentation', 'other'];
   const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
   const MONTHS_FULL = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
@@ -199,7 +199,10 @@
     coarse: !!(mqCoarse && mqCoarse.matches),
     outbox: [],
     flushing: false,
-    agendaDirty: false
+    agendaDirty: false,
+    fitScale: 1,
+    fitScrollX: 0,
+    fitScrollY: 0
   };
 
   const ui = {};
@@ -215,12 +218,12 @@
     'app', 'masthead', 'brandMark', 'wallTitle', 'wallSubtitle', 'wallTerm', 'wallStats',
     'presenceList', 'presenceCount', 'btnMe', 'btnShare', 'btnAdd', 'btnHelp',
     'deadlineStrip', 'deadlineRail', 'toolbar', 'filterType', 'filterCourse', 'filterStatus',
-    'searchInput', 'viewToggle', 'connBadge', 'stage', 'wallView', 'wallCanvas', 'wallEmpty',
-    'agendaView', 'agendaGroups', 'drawer', 'drawerBackdrop', 'toasts', 'nameDialog',
+    'searchInput', 'viewToggle', 'connBadge', 'btnFit', 'stage', 'wallView', 'wallCanvas', 'wallEmpty',
+    'agendaView', 'agendaGroups', 'drawer', 'drawerBackdrop', 'toasts', 'srLive', 'nameDialog',
     'nameInput', 'nameSave', 'nameCancel', 'helpDialog', 'helpClose', 'drawerKicker',
     'drawerTitleInput', 'drawerTypeSelect', 'drawerCourseInput', 'drawerKindInput',
     'drawerDueDate', 'drawerDueTime', 'drawerWeightInput', 'drawerBriefInput', 'drawerModeSelect',
-    'drawerNotesInput', 'drawerLinkInput', 'drawerColorGroup', 'drawerDoneToggle', 'drawerForm',
+    'drawerNotesInput', 'drawerLinkInput', 'drawerColorGroup', 'colorGroupLabel', 'drawerDoneToggle', 'drawerForm',
     'drawerDueBadge', 'drawerProgress', 'drawerReqs', 'btnAddReq', 'btnDuplicateCard',
     'btnDeleteCard', 'drawerSaveState', 'drawerClose', 'drawerTitle', 'drawerEditBtn', 'drawerForm',
     'btnLock', 'unlockDialog', 'unlockInput', 'unlockError', 'unlockSubmit', 'unlockCancel'
@@ -261,6 +264,51 @@
     setTimeout(function () { if (node.parentNode) node.parentNode.removeChild(node); }, life);
   }
 
+
+  /* ------------------------- course -> paper colour ----------------------- */
+  /* Deterministic on every client: djb2(normalised course) picks the preferred
+     paper; collisions probe the next free slot over the alphabetically sorted
+     course codes, so the same card set always yields the same mapping. */
+  function normCourse(c) { return String(c == null ? '' : c).trim().toUpperCase().replace(/\s+/g, ' '); }
+  function djb2(str) {
+    var h = 5381;
+    for (var i = 0; i < str.length; i++) h = (((h << 5) + h) + str.charCodeAt(i)) >>> 0;
+    return h;
+  }
+  var paperMap = new Map();
+  var paperRevision = -1;
+  var paperVersion = 0;
+  function bumpPaperVersion() { paperVersion++; }
+  function rebuildPaperMap() {
+    var seen = {};
+    for (var i = 0; i < state.cards.length; i++) {
+      var code = normCourse(state.cards[i].course);
+      if (code) seen[code] = true;
+    }
+    var codes = Object.keys(seen).sort();
+    paperMap = new Map();
+    var used = {};
+    var span = COLORS.length;
+    for (var j = 0; j < codes.length; j++) {
+      var slot = djb2(codes[j]) % span;
+      var step = 0;
+      while (used[slot] && step < span) { slot = (slot + 1) % span; step++; }
+      used[slot] = true;
+      paperMap.set(codes[j], COLORS[slot]);
+    }
+    paperRevision = paperVersion;
+  }
+  function paperForCourse(course) {
+    var code = normCourse(course);
+    if (!code) return '';
+    if (paperRevision !== paperVersion) rebuildPaperMap();
+    return paperMap.get(code) || '';
+  }
+  function effectiveColor(card) {
+    if (!card) return 'bone';
+    var own = COLORS.indexOf(card.color) >= 0 ? card.color : 'bone';
+    return paperForCourse(card.course) || own;
+  }
 
   /* ------------------------------ trash zone ------------------------------ */
   /* app.js creates this element and toggles .is-visible/.is-armed; styles.css owns
@@ -429,6 +477,7 @@
     saveOutbox();
   }
   function postOp(op, noEnqueue) {
+    noteLocalWrite(op);
     if (state.mode === 'supabase') return supaWrite(op, noEnqueue);
     if (state.mode !== 'http' || !navigator.onLine) {
       if (!noEnqueue) enqueueOp(op);
@@ -682,10 +731,10 @@
         queueCacheSave();
         break;
       case 'card.upsert':
-        handleRemoteUpsert(data.card);
+        handleRemoteUpsert(data.card, data);
         break;
       case 'card.delete':
-        handleRemoteDelete(data.id);
+        handleRemoteDelete(data.id, data);
         break;
       case 'course.update':
         if (data.course && typeof data.course === 'object') {
@@ -702,10 +751,16 @@
         break;
     }
   }
-  function handleRemoteUpsert(raw) {
+  function handleRemoteUpsert(raw, envelope) {
     var incoming = normaliseCard(raw);
     if (!incoming) return;
+    if (isOwnWrite(raw && raw.id, raw)) {
+      /* the server echoed a write this client just made - local state is authoritative */
+      state.pendingCards.delete(incoming.id);
+      return;
+    }
     var local = getCard(incoming.id);
+    var contentDiffers = !local || cardContentKey(local) !== cardContentKey(incoming);
     var localUpdated = local ? Date.parse(local.updatedAt || '') : NaN;
     var remoteUpdated = Date.parse(incoming.updatedAt || '');
     if (local && isFinite(localUpdated) && isFinite(remoteUpdated) && localUpdated > remoteUpdated) {
@@ -726,10 +781,18 @@
     }
     queueCacheSave();
     updateEmptyState();
+    /* drag ops only move x/y/z - do not narrate a peer's whole drag */
+    if (contentDiffers) announceLive(remoteActorName(incoming.id, envelope) + ' updated ' + limit(incoming.title, 40));
+    scheduleFitRecompute();
   }
-  function handleRemoteDelete(id) {
+  function handleRemoteDelete(id, envelope) {
     if (typeof id !== 'string') return;
+    if (isOwnWrite(id, null)) return;
+    var gone = getCard(id);
+    if (!gone) return;
+    var goneTitle = limit(gone.title, 40);
     if (!dropCard(id)) return;
+    announceLive(remoteActorName(id, envelope) + ' deleted ' + goneTitle);
     removePosterNode(id);
     if (drawer.id === id) closeDrawer({ flush: false });
     renderStats();
@@ -738,6 +801,7 @@
     if (state.view === 'agenda') renderAgenda();
     updateEmptyState();
     queueCacheSave();
+    scheduleFitRecompute();
   }
 
   /* ---------------------------- card normalisers -------------------------- */
@@ -863,6 +927,7 @@
       state.cards.push(card);
     }
     state.index.set(card.id, card);
+    bumpPaperVersion();
     return true;
   }
   function dropCard(id) {
@@ -872,6 +937,7 @@
     var at = state.cards.indexOf(card);
     if (at >= 0) state.cards.splice(at, 1);
     state.pendingCards.delete(id);
+    bumpPaperVersion();
     return true;
   }
   function nextZ() {
@@ -922,6 +988,7 @@
       }
     }
     overlayPendingCards();
+    bumpPaperVersion();
   }
 
   /* --------------------------- localStorage cache ------------------------- */
@@ -997,7 +1064,7 @@
   function matchesFilters(card) {
     var f = state.filters;
     if (f.type !== 'all' && card.type !== f.type) return false;
-    if (f.course !== 'all' && card.course !== f.course) return false;
+    if (f.course !== 'all' && normCourse(card.course) !== normCourse(f.course)) return false;
     var now = Date.now();
     if (f.status === 'open' && card.done) return false;
     if (f.status === 'done' && !card.done) return false;
@@ -1021,7 +1088,7 @@
     var art = el('article', 'poster');
     art.dataset.id = card.id;
     art.dataset.type = card.type;
-    art.dataset.color = card.color;
+    art.dataset.color = effectiveColor(card);
 
     var tape = el('div', 'poster-tape');
     tape.setAttribute('aria-hidden', 'true');
@@ -1098,6 +1165,11 @@
     li.classList.toggle('is-done', !!req.done);
     return li;
   }
+  /* display width adapts to the viewport; the stored card.w is never rewritten */
+  function posterWidth(card) {
+    var w = card && isFiniteNum(card.w) ? card.w : CARD_W_DEFAULT;
+    return Math.max(280, Math.min(w, window.innerWidth - 32));
+  }
   function updatePoster(id) {
     var node = posterNodes.get(id);
     var card = getCard(id);
@@ -1105,13 +1177,15 @@
     var refs = node.__refs;
     var now = Date.now();
 
-    node.style.left = card.x + 'px';
+    var width = posterWidth(card);
+    /* clamp on render as well: the displayed width is what must stay on the canvas */
+    node.style.left = clamp(card.x, 0, Math.max(0, CANVAS_W - width)) + 'px';
     node.style.top = card.y + 'px';
-    node.style.width = card.w + 'px';
+    node.style.width = width + 'px';
     node.style.setProperty('--rot', card.rot + 'deg');
     node.style.setProperty('--z', String(card.z));
     node.dataset.type = card.type;
-    node.dataset.color = card.color;
+    node.dataset.color = effectiveColor(card);
     node.classList.toggle('is-done', card.done);
 
     refs.course.textContent = card.course;
@@ -1144,6 +1218,7 @@
     refs.prog.style.setProperty('--p', total ? String(Math.round((doneCount / total) * 100)) : '0');
 
     syncPosterReqs(node, card);
+    scheduleFitRecompute();
   }
   function syncPosterReqs(node, card) {
     var host = node.__refs.reqs;
@@ -1182,6 +1257,7 @@
     if (!node) return;
     if (node.parentNode) node.parentNode.removeChild(node);
     posterNodes.delete(id);
+    scheduleFitRecompute();
   }
   function renderWall() {
     var canvas = ui.wallCanvas;
@@ -1203,6 +1279,7 @@
     posterNodes.forEach(function (node, id) { if (!keep.has(id)) stale.push(id); });
     for (var j = 0; j < stale.length; j++) removePosterNode(stale[j]);
     updateEmptyState(list.length);
+    scheduleFitRecompute();
   }
   function updateEmptyState(count) {
     var empty = ui.wallEmpty;
@@ -1324,6 +1401,7 @@
       empty.textContent = state.cards.length ? 'No posters match these filters.' : 'Nothing on the wall yet - add your first poster.';
       host.appendChild(empty);
     }
+    renderAgendaAside();
     state.agendaDirty = false;
   }
   function buildAgendaGroup(labelText, items, now, isDone) {
@@ -1346,6 +1424,7 @@
     li.dataset.id = card.id;
     li.dataset.type = card.type;
     li.dataset.urgency = isDone ? 'done' : urgencyOf(card, now);
+    li.dataset.paper = effectiveColor(card);
     li.tabIndex = 0;
     li.setAttribute('role', 'button');
     li.setAttribute('aria-label', 'Open ' + card.title);
@@ -1359,8 +1438,13 @@
     var bits = [];
     if (card.course) bits.push(card.course);
     if (card.kind) bits.push(card.kind);
-    bits.push(card.mode === 'group' ? 'Group' : 'Solo');
-    if (card.weight) bits.push(card.weight);
+    /* "Individual" is the default; only the exception earns the characters,
+       otherwise the meta line wraps and orphans the weight on a phone. */
+    if (card.mode === 'group') bits.push('Group');
+    /* "Milestone" often lands in both kind and weight; do not print it twice. */
+    if (card.weight && String(card.weight).toLowerCase() !== String(card.kind || '').toLowerCase()) {
+      bits.push(card.weight);
+    }
     var meta = el('span', 'agenda-meta');
     meta.textContent = bits.join(' \u00b7 ');
     body.appendChild(title);
@@ -1375,6 +1459,141 @@
     li.appendChild(stateEl);
     return li;
   }
+
+  /* ------------------------------ agenda aside ---------------------------- */
+  function asideBlock(title) {
+    var sec = el('section', 'aside-block');
+    var head = el('h3', 'aside-head');
+    head.textContent = title;
+    sec.appendChild(head);
+    return sec;
+  }
+  function addAsideStat(ul, label, value, tone) {
+    var li = el('li', 'stat-row');
+    if (tone) li.dataset.tone = tone;
+    var l = el('span', 'stat-label');
+    l.textContent = label;
+    var v = el('span', 'stat-value');
+    v.textContent = String(value);
+    li.appendChild(l);
+    li.appendChild(v);
+    ul.appendChild(li);
+  }
+  function ensureAgendaAside() {
+    if (ui.agendaAside && document.contains(ui.agendaAside)) return ui.agendaAside;
+    var view = ui.agendaView;
+    if (!view) return null;
+    var aside = byId('agendaAside');
+    if (!aside) {
+      aside = el('aside', 'agenda-aside');
+      aside.id = 'agendaAside';
+      aside.setAttribute('aria-label', 'Course overview');
+      var host = ui.agendaGroups;
+      if (host && host.parentNode === view) view.insertBefore(aside, host.nextSibling);
+      else view.appendChild(aside);
+    }
+    aside.addEventListener('click', onAgendaAsideClick);
+    ui.agendaAside = aside;
+    return aside;
+  }
+  function renderAgendaAside() {
+    var aside = ensureAgendaAside();
+    if (!aside) return;
+    aside.textContent = '';
+    if (!state.cards.length) { aside.hidden = true; return; }
+    aside.hidden = false;
+    var now = Date.now();
+    var overdue = 0, week = 0, done = 0;
+    var courses = {};
+    var codes = [];
+    for (var i = 0; i < state.cards.length; i++) {
+      var card = state.cards[i];
+      if (card.done) {
+        done++;
+      } else {
+        var t = dueMs(card);
+        if (isFinite(t)) {
+          var delta = dayDelta(t, now);
+          if (delta < 0) overdue++;
+          else if (delta <= 7) week++;
+        }
+      }
+      var code = normCourse(card.course);
+      if (!code) continue;
+      var rec = courses[code];
+      if (!rec) { rec = courses[code] = { count: 0, done: 0, total: 0, sample: card }; codes.push(code); }
+      rec.count++;
+      var reqs = card.requirements || [];
+      rec.total += reqs.length;
+      for (var j = 0; j < reqs.length; j++) if (reqs[j].done) rec.done++;
+    }
+    codes.sort();
+
+    var glance = asideBlock('At a glance');
+    var stats = el('ul', 'aside-stats');
+    addAsideStat(stats, 'Overdue', overdue, overdue > 0 ? 'late' : '');
+    addAsideStat(stats, 'This week', week, '');
+    addAsideStat(stats, 'Done', done, '');
+    glance.appendChild(stats);
+    aside.appendChild(glance);
+
+    if (!codes.length) return;
+    var block = asideBlock('Courses');
+    var list = el('ul', 'course-list');
+    var active = state.filters.course && state.filters.course !== 'all' ? normCourse(state.filters.course) : '';
+    for (var k = 0; k < codes.length; k++) {
+      var course = codes[k];
+      var data = courses[course];
+      var li = el('li');
+      var btn = el('button', 'course-row');
+      btn.type = 'button';
+      btn.dataset.course = course;
+      btn.dataset.paper = effectiveColor(data.sample);
+      btn.setAttribute('aria-pressed', active && active === course ? 'true' : 'false');
+      var swatch = el('span', 'course-swatch');
+      var body = el('span', 'course-body');
+      var line = el('span', 'course-line');
+      var codeEl = el('span', 'course-code');
+      codeEl.textContent = course;
+      var countEl = el('span', 'course-count');
+      countEl.textContent = data.count + (data.count === 1 ? ' poster' : ' posters');
+      line.appendChild(codeEl);
+      line.appendChild(countEl);
+      var bar = el('span', 'course-bar');
+      var fill = el('span', 'course-bar-fill');
+      fill.style.width = (data.total ? Math.round((data.done / data.total) * 100) : 0) + '%';
+      bar.appendChild(fill);
+      var meta = el('span', 'course-meta');
+      meta.textContent = data.done + '/' + data.total + ' reqs';
+      body.appendChild(line);
+      body.appendChild(bar);
+      body.appendChild(meta);
+      btn.appendChild(swatch);
+      btn.appendChild(body);
+      li.appendChild(btn);
+      list.appendChild(li);
+    }
+    block.appendChild(list);
+    aside.appendChild(block);
+  }
+  function onAgendaAsideClick(e) {
+    var btn = e.target && e.target.closest ? e.target.closest('.course-row') : null;
+    if (!btn) return;
+    e.preventDefault();
+    var code = btn.dataset.course || '';
+    var sel = ui.filterCourse;
+    if (!sel || sel.tagName !== 'SELECT' || !code) return;
+    var value = null;
+    for (var i = 0; i < sel.options.length; i++) {
+      if (normCourse(sel.options[i].value) === code) { value = sel.options[i].value; break; }
+    }
+    if (value == null) return;
+    /* clicking the active course clears the filter */
+    sel.value = normCourse(sel.value) === code ? 'all' : value;
+    try { sel.dispatchEvent(new Event('change', { bubbles: true })); }
+    catch (err) { setCourseFilter(value); }
+  }
+
   function renderPresence() {
     var me = state.me;
     if (!me) return;
@@ -1448,11 +1667,14 @@
   }
   function setView(view) {
     state.view = view === 'agenda' ? 'agenda' : 'wall';
+    if (state.view === 'agenda' && fitEnabled()) disableFit(true, true);
     if (ui.wallView) ui.wallView.hidden = state.view !== 'wall';
     if (ui.agendaView) ui.agendaView.hidden = state.view !== 'agenda';
     if (state.view === 'agenda') renderAgenda();
     updateViewButtons();
     document.documentElement.dataset.view = state.view;
+    setFitButton();
+    updateCompact();
     try { window.localStorage.setItem(VIEW_KEY, state.view); } catch (e) {}
   }
   function updateViewButtons() {
@@ -1550,6 +1772,7 @@
     if (ui.btnDuplicateCard) ui.btnDuplicateCard.disabled = view;
     if (ui.btnDeleteCard) ui.btnDeleteCard.disabled = view;
     if (view) setSaveState('idle');
+    updateColorSwatches();
     sizeViewTextareas(view);
   }
 
@@ -1577,7 +1800,17 @@
     hideTrash();
     opts = opts || {};
     if (!state.unlocked) opts.mode = 'view';
-    if (!drawer.id) drawer.lastFocus = document.activeElement;
+    if (!drawer.id) {
+      /* a pointer click lands on <body>; remember the poster title so focus can return */
+      var opener = document.activeElement;
+      var poster = null;
+      try {
+        var openerPoster = opener && opener.closest ? opener.closest('.poster') : null;
+        if (openerPoster && ui.wallCanvas && ui.wallCanvas.contains(openerPoster)) poster = openerPoster;
+        else if ((!opener || opener === document.body) && posterNodes.has(card.id)) poster = posterNodes.get(card.id);
+      } catch (e) { poster = null; }
+      drawer.lastFocus = poster ? (poster.querySelector('.poster-title') || opener) : opener;
+    }
     drawer.id = card.id;
     drawer.color = card.color;
     drawer.done = !!card.done;
@@ -1695,12 +1928,21 @@
   function updateColorSwatches() {
     var host = ui.drawerColorGroup;
     if (!host) return;
+    var card = drawer.id ? getCard(drawer.id) : null;
+    var hasCourse = !!(card && normCourse(card.course));
+    /* a course owns the paper; read-only preview disables everything anyway */
+    var locked = drawer.mode === 'view' || hasCourse;
+    var active = hasCourse ? effectiveColor(card) : drawer.color;
     var btns = host.querySelectorAll('[data-color]');
     for (var i = 0; i < btns.length; i++) {
-      var on = btns[i].dataset.color === drawer.color;
+      var on = btns[i].dataset.color === active;
       btns[i].classList.toggle('is-active', on);
       btns[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+      btns[i].disabled = locked;
+      btns[i].setAttribute('aria-disabled', locked ? 'true' : 'false');
     }
+    var label = ui.colorGroupLabel || byId('colorGroupLabel');
+    if (label) label.textContent = hasCourse ? 'Paper (from course)' : 'Paper';
   }
   function updateDoneToggle() {
     var node = ui.drawerDoneToggle;
@@ -1789,7 +2031,8 @@
         ui.drawerDueTime ? ui.drawerDueTime.value : ''
       );
     }
-    next.color = drawer.color;
+    /* a course owns the paper: keep the stored colour, only course-less cards edit it */
+    next.color = normCourse(next.course) ? (COLORS.indexOf(card.color) >= 0 ? card.color : drawer.color) : drawer.color;
     next.done = readDoneToggle();
     next.updatedAt = nowIso();
     return next;
@@ -1806,6 +2049,12 @@
     renderStats();
     renderRail();
     renderDrawerMeta(next);
+    updateColorSwatches();
+    /* a new/renamed course must appear in the filter and the agenda overview */
+    if (normCourse(next.course) !== normCourse(card.course)) {
+      populateCourseFilter();
+      renderAgenda();
+    }
     queueCacheSave();
   }
   function scheduleDrawerSave() {
@@ -1936,8 +2185,9 @@
     var canvas = ui.wallCanvas;
     if (!canvas) return { x: 96, y: 96 };
     var rect = canvas.getBoundingClientRect();
-    var x = (window.innerWidth / 2) - rect.left - (w / 2);
-    var y = (window.innerHeight / 2) - rect.top - (h / 2);
+    var scale = state.fitScale > 0 ? state.fitScale : 1;
+    var x = ((window.innerWidth / 2) - rect.left) / scale - (w / 2);
+    var y = ((window.innerHeight / 2) - rect.top) / scale - (h / 2);
     return {
       x: clamp(snap(x), 0, CANVAS_W - w),
       y: clamp(snap(y), 0, CANVAS_H - CARD_H_GUESS)
@@ -2029,7 +2279,7 @@
     var card = getCard(drawer.id);
     if (!card) return;
     var ok = true;
-    try { ok = window.confirm('Delete "' + limit(card.title, 60) + '" from the wall? This cannot be undone.'); } catch (e) { ok = true; }
+    try { ok = window.confirm('Delete "' + limit(card.title, 60) + '" from the wall? This cannot be undone.'); } catch (e) { ok = false; }
     if (!ok) return;
     var id = card.id;
     applyCardDelete(id);
@@ -2083,13 +2333,15 @@
   }
 
   /* -------------------------------- drag ---------------------------------- */
-  function clampCardPosition(card, x, y) {
+  function clampCardPosition(card, x, y, exact) {
     var node = posterNodes.get(card.id);
     var h = node ? node.offsetHeight : CARD_H_GUESS;
     var maxY = Math.max(0, CANVAS_H - h);
+    var px = exact ? Math.round(x) : snap(x);
+    var py = exact ? Math.round(y) : snap(y);
     return {
-      x: clamp(snap(x), 0, Math.max(0, CANVAS_W - card.w)),
-      y: clamp(snap(y), 0, maxY)
+      x: clamp(px, 0, Math.max(0, CANVAS_W - posterWidth(card))),
+      y: clamp(py, 0, maxY)
     };
   }
   function startDragVisual() {
@@ -2128,10 +2380,13 @@
     drag.pid = e.pointerId;
     drag.sx = e.clientX;
     drag.sy = e.clientY;
-    drag.ox = card.x;
-    drag.oy = card.y;
-    drag.x = card.x;
-    drag.y = card.y;
+    /* the rendered left can differ from card.x when updatePoster clamped it */
+    drag.ox = parseFloat(node.style.left);
+    if (!isFiniteNum(drag.ox)) drag.ox = card.x;
+    drag.oy = parseFloat(node.style.top);
+    if (!isFiniteNum(drag.oy)) drag.oy = card.y;
+    drag.x = drag.ox;
+    drag.y = drag.oy;
     drag.z = nextZ();
     drag.prevZ = card.z;
     drag.moved = false;
@@ -2139,8 +2394,9 @@
     drag.lifted = false;
     drag.longPress = false;
     try { node.setPointerCapture(e.pointerId); } catch (err) {}
-    lastPointer.x = e.clientX - ui.wallCanvas.getBoundingClientRect().left;
-    lastPointer.y = e.clientY - ui.wallCanvas.getBoundingClientRect().top;
+    var downScale = state.fitScale > 0 ? state.fitScale : 1;
+    lastPointer.x = (e.clientX - ui.wallCanvas.getBoundingClientRect().left) / downScale;
+    lastPointer.y = (e.clientY - ui.wallCanvas.getBoundingClientRect().top) / downScale;
     clearLongPress();
     drag.lpTimer = setTimeout(function () {
       drag.lpTimer = 0;
@@ -2161,10 +2417,11 @@
   }
 
   function onPointerMove(e) {
+    var moveScale = state.fitScale > 0 ? state.fitScale : 1;
     if (ui.wallCanvas) {
       var rect = ui.wallCanvas.getBoundingClientRect();
-      lastPointer.x = e.clientX - rect.left;
-      lastPointer.y = e.clientY - rect.top;
+      lastPointer.x = (e.clientX - rect.left) / moveScale;
+      lastPointer.y = (e.clientY - rect.top) / moveScale;
     }
     if (!drag.active || e.pointerId !== drag.pid) {
       if (drag.active === false && ui.wallCanvas && ui.wallCanvas.contains(e.target)) schedulePresence(false);
@@ -2182,7 +2439,7 @@
       showTrash();
     }
     if (e.cancelable) e.preventDefault();
-    var pos = clampCardPosition(drag.card, drag.ox + dx, drag.oy + dy);
+    var pos = clampCardPosition(drag.card, drag.ox + dx / moveScale, drag.oy + dy / moveScale);
     drag.x = pos.x;
     drag.y = pos.y;
     drag.node.style.left = pos.x + 'px';
@@ -2194,7 +2451,7 @@
     var node = drag.node;
     var card = drag.card;
     var z = drag.z;
-    var x = clamp(snap(drag.x), 0, Math.max(0, CANVAS_W - card.w));
+    var x = clamp(snap(drag.x), 0, Math.max(0, CANVAS_W - posterWidth(card)));
     var nodeH = node ? node.offsetHeight : CARD_H_GUESS;
     var y = clamp(snap(drag.y), 0, Math.max(0, CANVAS_H - nodeH));
     endDragVisual();
@@ -2211,6 +2468,7 @@
     pendingKeep(card);
     queueCacheSave();
     postOp({ op: 'card.upsert', card: cloneCard(card) });
+    scheduleFitRecompute();
     suppressClickUntil = Date.now() + 350;
     schedulePresence(true);
   }
@@ -2313,13 +2571,338 @@
     toggleRequirement(poster.dataset.id, target.dataset.reqId, !!target.checked);
   }
   function onCanvasKeydown(e) {
-    if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
     var target = e.target;
     if (!target || !target.classList || !target.classList.contains('poster-title')) return;
     var poster = target.closest('.poster');
     if (!poster) return;
+    var key = e.key;
+    if (key === 'Enter' || key === ' ' || key === 'Spacebar') {
+      e.preventDefault();
+      openDrawer(poster.dataset.id);
+      return;
+    }
+    if (key !== 'ArrowLeft' && key !== 'ArrowRight' && key !== 'ArrowUp' && key !== 'ArrowDown') return;
+    if (isTypingTarget(target)) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (!state.unlocked) { toast('Unlock editing to move posters'); return; }
+    var card = getCard(poster.dataset.id);
+    if (!card) return;
     e.preventDefault();
-    openDrawer(poster.dataset.id);
+    var step = e.shiftKey ? 40 : 10;
+    nudgeCard(
+      card,
+      key === 'ArrowLeft' ? -step : (key === 'ArrowRight' ? step : 0),
+      key === 'ArrowUp' ? -step : (key === 'ArrowDown' ? step : 0)
+    );
+  }
+
+  /* ------------------- remote announcements / own echoes ------------------- */
+  var ownWrites = new Map(); /* card id -> [{ sig, at }] for writes this client sent */
+  var liveLast = 0;
+  var liveTimer = 0;
+  var liveQueued = '';
+  function cardContentKey(card) {
+    if (!card || typeof card !== 'object') return '';
+    try {
+      return JSON.stringify([
+        card.title, card.brief, card.notes, card.due || '', card.course, card.kind,
+        card.weight, !!card.done, card.requirements || [], card.link, card.color
+      ]);
+    } catch (e) { return ''; }
+  }
+  function cardSignature(card) {
+    if (!card || typeof card !== 'object') return '';
+    try {
+      return JSON.stringify([
+        card.title, card.type, card.course, card.kind, card.due || '', card.weight,
+        card.brief, card.notes, card.link, card.color, card.x, card.y, card.w,
+        card.rot, card.z, !!card.done, card.mode, card.requirements || []
+      ]);
+    } catch (e) { return ''; }
+  }
+  function noteLocalWrite(op) {
+    if (!op || typeof op !== 'object') return;
+    var id = '';
+    var sig = '';
+    if (op.op === 'card.upsert' && op.card && typeof op.card.id === 'string') {
+      id = op.card.id;
+      sig = cardSignature(op.card);
+    } else if (op.op === 'card.delete' && typeof op.id === 'string') {
+      id = op.id;
+      sig = '';
+    } else {
+      return;
+    }
+    var list = ownWrites.get(id) || [];
+    list.push({ sig: sig, at: Date.now() });
+    while (list.length > 4) list.shift();
+    ownWrites.set(id, list);
+    if (ownWrites.size > 80) {
+      var cutoff = Date.now() - 10000;
+      ownWrites.forEach(function (arr, key) {
+        var kept = arr.filter(function (rec) { return rec.at >= cutoff; });
+        if (kept.length) ownWrites.set(key, kept); else ownWrites.delete(key);
+      });
+    }
+  }
+  function isOwnWrite(id, card) {
+    if (typeof id !== 'string') return false;
+    var list = ownWrites.get(id);
+    if (!list || !list.length) return false;
+    var now = Date.now();
+    var sig = card ? cardSignature(card) : '';
+    for (var i = 0; i < list.length; i++) {
+      var rec = list[i];
+      if (now - rec.at > 8000) continue;
+      if (rec.sig === sig) {
+        list.splice(i, 1);
+        if (!list.length) ownWrites.delete(id);
+        return true;
+      }
+    }
+    return false;
+  }
+  function remoteActorName(cardId, envelope) {
+    var direct = envelope && (envelope.by || envelope.user || envelope.actor);
+    if (typeof direct === 'string' && direct.trim()) return limit(direct.trim(), 40);
+    var users = state.users || [];
+    for (var i = 0; i < users.length; i++) {
+      var u = users[i];
+      if (!u || !u.id || (state.me && u.id === state.me.id)) continue;
+      if (u.cardId && u.cardId === cardId) return u.name;
+    }
+    return 'Someone';
+  }
+  /* polite status region; never more than one announcement per second */
+  function announceLive(message) {
+    var host = ui.srLive || byId('srLive');
+    if (!host || !message) return;
+    var text = String(message);
+    var now = Date.now();
+    var gap = now - liveLast;
+    if (gap >= 1000) {
+      liveLast = now;
+      host.textContent = text;
+      return;
+    }
+    liveQueued = text;
+    if (liveTimer) return;
+    liveTimer = setTimeout(function () {
+      liveTimer = 0;
+      var next = liveQueued;
+      liveQueued = '';
+      if (!next) return;
+      liveLast = Date.now();
+      var node = ui.srLive || byId('srLive');
+      if (node) node.textContent = next;
+    }, 1000 - gap);
+  }
+
+  /* ------------------------- keyboard nudge + save ------------------------ */
+  var nudgeSaves = new Map();
+  var nudgeTimer = 0;
+  function scheduleNudgeSave(card) {
+    if (!card || !card.id) return;
+    nudgeSaves.set(card.id, card);
+    if (nudgeTimer) clearTimeout(nudgeTimer);
+    nudgeTimer = setTimeout(flushNudgeSaves, 300);
+  }
+  function flushNudgeSaves() {
+    nudgeTimer = 0;
+    var pending = [];
+    nudgeSaves.forEach(function (card, id) {
+      var current = getCard(id);
+      if (current) pending.push(current);
+    });
+    nudgeSaves.clear();
+    for (var i = 0; i < pending.length; i++) {
+      var copy = cloneCard(pending[i]);
+      if (copy) postOp({ op: 'card.upsert', card: copy });
+    }
+  }
+  function nudgeCard(card, dx, dy) {
+    var pos = clampCardPosition(card, card.x + dx, card.y + dy, true);
+    if (pos.x === card.x && pos.y === card.y) return;
+    card.x = pos.x;
+    card.y = pos.y;
+    card.updatedAt = nowIso();
+    var node = posterNodes.get(card.id);
+    if (node) {
+      node.style.left = card.x + 'px';
+      node.style.top = card.y + 'px';
+    }
+    pendingKeep(card);
+    queueCacheSave();
+    scheduleNudgeSave(card);
+    scheduleFitRecompute();
+  }
+
+  /* --------------------------- fit the whole wall ------------------------- */
+  var fitResizeTimer = 0;
+  var fitSettleTimer = 0;
+  var fitViewW = 0; /* stage size recorded when the fit was applied */
+  var fitViewH = 0;
+  function fitEnabled() { return state.fitScale !== 1; }
+  /* any render while fitted changes the bbox; coalesce and re-fit without
+     throwing away the pan (see applyFitScale's keepCentre) */
+  function scheduleFitRecompute() {
+    if (!fitEnabled()) return;
+    if (fitSettleTimer) clearTimeout(fitSettleTimer);
+    fitSettleTimer = setTimeout(function () {
+      fitSettleTimer = 0;
+      requestAnimationFrame(recomputeFit);
+    }, 120);
+  }
+  function setFitButton() {
+    var btn = ui.btnFit;
+    if (!btn) return;
+    var show = state.view === 'wall';
+    btn.hidden = !show;
+    btn.disabled = !show;
+    btn.setAttribute('aria-pressed', fitEnabled() ? 'true' : 'false');
+    btn.classList.toggle('is-active', fitEnabled());
+  }
+  function fitBox() {
+    var box = null;
+    var list = visibleCards();
+    for (var i = 0; i < list.length; i++) {
+      var card = list[i];
+      var node = posterNodes.get(card.id);
+      if (!node || node.hidden || !node.offsetWidth) continue;
+      var w = node.offsetWidth;
+      var h = node.offsetHeight || CARD_H_GUESS;
+      if (!box) { box = { x: card.x, y: card.y, w: w, h: h }; continue; }
+      var right = Math.max(box.x + box.w, card.x + w);
+      var bottom = Math.max(box.y + box.h, card.y + h);
+      box.x = Math.min(box.x, card.x);
+      box.y = Math.min(box.y, card.y);
+      box.w = right - box.x;
+      box.h = bottom - box.y;
+    }
+    return box;
+  }
+  function fitScaleFor(box) {
+    var stage = ui.stage;
+    if (!stage || !box || !box.w || !box.h) return 1;
+    /* Narrow stages need a deeper zoom-out or "fit" cannot actually fit the
+       used wall; 0.35 on a phone left two screens of posters still hidden. */
+    var floor = stage.clientWidth < 700 ? 0.16 : 0.35;
+    return clamp(Math.min((stage.clientWidth - 64) / box.w, (stage.clientHeight - 96) / box.h), floor, 1);
+  }
+  function applyFitScale(z, box, keepCentre) {
+    var stage = ui.stage;
+    var canvas = ui.wallCanvas;
+    if (!stage || !canvas || !box) return;
+    var oldScale = state.fitScale > 0 ? state.fitScale : 1;
+    /* remember which canvas point currently sits in the middle of the viewport
+       so a re-fit keeps the viewer's pan instead of snapping to the box origin.
+       Use the stage size from the previous fit: on resize clientWidth/Height
+       already describe the NEW viewport. */
+    var oldW = fitViewW || stage.clientWidth;
+    var oldH = fitViewH || stage.clientHeight;
+    var centreX = (stage.scrollLeft + oldW / 2) / oldScale;
+    var centreY = (stage.scrollTop + oldH / 2) / oldScale;
+    state.fitScale = z;
+    canvas.style.transformOrigin = '0 0';
+    canvas.style.transform = 'scale(' + z + ')';
+    if (ui.wallView) {
+      ui.wallView.style.width = (CANVAS_W * z) + 'px';
+      ui.wallView.style.height = (CANVAS_H * z) + 'px';
+    }
+    if (keepCentre) {
+      stage.scrollLeft = Math.max(0, centreX * z - stage.clientWidth / 2);
+      stage.scrollTop = Math.max(0, centreY * z - stage.clientHeight / 2);
+    } else {
+      stage.scrollLeft = Math.max(0, box.x * z - 24);
+      stage.scrollTop = Math.max(0, box.y * z - 24);
+    }
+    fitViewW = stage.clientWidth;
+    fitViewH = stage.clientHeight;
+    setFitButton();
+  }
+  function enableFit() {
+    if (state.view !== 'wall') return;
+    var stage = ui.stage;
+    var canvas = ui.wallCanvas;
+    if (!stage || !canvas) return;
+    var box = fitBox();
+    if (!box) { toast('Nothing to fit yet'); setFitButton(); return; }
+    var z = fitScaleFor(box);
+    if (!isFinite(z) || z >= 0.98) {
+      state.fitScale = 1;
+      setFitButton();
+      toast('Everything already fits');
+      return;
+    }
+    state.fitScrollX = stage.scrollLeft;
+    state.fitScrollY = stage.scrollTop;
+    applyFitScale(z, box);
+    toast('Whole wall in view');
+  }
+  function disableFit(silent, keepScroll) {
+    var stage = ui.stage;
+    var canvas = ui.wallCanvas;
+    var was = fitEnabled();
+    state.fitScale = 1;
+    if (canvas) {
+      canvas.style.transform = '';
+      canvas.style.transformOrigin = '';
+    }
+    if (ui.wallView) {
+      ui.wallView.style.width = '';
+      ui.wallView.style.height = '';
+    }
+    if (stage && !keepScroll) {
+      stage.scrollLeft = state.fitScrollX || 0;
+      stage.scrollTop = state.fitScrollY || 0;
+    }
+    state.fitScrollX = 0;
+    state.fitScrollY = 0;
+    fitViewW = 0;
+    fitViewH = 0;
+    setFitButton();
+    if (was && !silent) toast('Fit off');
+  }
+  function toggleFit() {
+    if (state.view !== 'wall') { toast('Fit is only available on the wall'); return; }
+    if (fitEnabled()) disableFit(); else enableFit();
+  }
+  function recomputeFit() {
+    if (!fitEnabled()) return;
+    if (state.view !== 'wall') { disableFit(true, true); return; }
+    var box = fitBox();
+    if (!box) { disableFit(true); return; }
+    var z = fitScaleFor(box);
+    if (!isFinite(z) || z >= 0.98) { disableFit(true); return; }
+    applyFitScale(z, box, true);
+  }
+  function refreshPosterWidths() {
+    posterNodes.forEach(function (node, id) {
+      var card = getCard(id);
+      if (card) node.style.width = posterWidth(card) + 'px';
+    });
+  }
+
+  /* ----------------------------- chrome condense -------------------------- */
+  var compactQueued = false;
+  function updateCompact() {
+    var app = ui.app || byId('app');
+    if (!app || !ui.stage) return;
+    var top = ui.stage.scrollTop;
+    var compact = app.classList.contains('is-compact');
+    /* hysteresis: condense late, expand much earlier, so bounce scrolling
+       at the top cannot flap the masthead */
+    if (!compact && top > 48) app.classList.add('is-compact');
+    else if (compact && top < 12) app.classList.remove('is-compact');
+  }
+  function onStageScroll() {
+    schedulePresence(false);
+    if (compactQueued) return;
+    compactQueued = true;
+    requestAnimationFrame(function () {
+      compactQueued = false;
+      updateCompact();
+    });
   }
 
   /* ------------------------------- filters -------------------------------- */
@@ -2370,12 +2953,13 @@
     var courses = [];
     var seen = {};
     for (var i = 0; i < state.cards.length; i++) {
-      var c = state.cards[i].course;
-      if (!c || seen[c]) continue;
-      seen[c] = true;
-      courses.push(c);
+      var raw = state.cards[i].course;
+      var code = normCourse(raw);
+      if (!code || seen[code]) continue;
+      seen[code] = true;
+      courses.push({ code: code, label: String(raw).trim() });
     }
-    courses.sort();
+    courses.sort(function (a, b) { return a.code < b.code ? -1 : (a.code > b.code ? 1 : 0); });
     sel.textContent = '';
     var allOpt = document.createElement('option');
     allOpt.value = 'all';
@@ -2383,8 +2967,8 @@
     sel.appendChild(allOpt);
     for (var j = 0; j < courses.length; j++) {
       var opt = document.createElement('option');
-      opt.value = courses[j];
-      opt.textContent = courses[j];
+      opt.value = courses[j].code;
+      opt.textContent = courses[j].label;
       sel.appendChild(opt);
     }
     if (current !== 'all') {
@@ -2648,6 +3232,7 @@
     }
     if (k === '?') { e.preventDefault(); openHelp(); return; }
     if (k === 'g' || k === 'G') { e.preventDefault(); toggleView(); return; }
+    if (k === 'f' || k === 'F') { e.preventDefault(); toggleFit(); return; }
   }
   function trapDrawerFocus(e) {
     if (e.key !== 'Tab' || !drawer.id || !ui.drawer) return;
@@ -2700,6 +3285,9 @@
         e.preventDefault();
         setView(btn.dataset.view);
       });
+    }
+    if (ui.btnFit) {
+      ui.btnFit.addEventListener('click', function (e) { e.preventDefault(); toggleFit(); });
     }
     if (ui.filterType) {
       ui.filterType.addEventListener('click', function (e) {
@@ -2767,6 +3355,7 @@
       canvas.addEventListener('dragstart', function (e) { e.preventDefault(); });
       canvas.addEventListener('scroll', function () { schedulePresence(false); }, { passive: true });
     }
+    if (ui.stage) ui.stage.addEventListener('scroll', onStageScroll, { passive: true });
     document.addEventListener('pointermove', onPointerMove);
     document.addEventListener('touchmove', onTouchMoveGuard, { passive: false });
     document.addEventListener('pointerup', onPointerUp);
@@ -2774,6 +3363,12 @@
     window.addEventListener('scroll', function () { schedulePresence(false); }, { passive: true });
     window.addEventListener('resize', function () {
       if (state.view === 'wall') updateEmptyState();
+      if (fitResizeTimer) clearTimeout(fitResizeTimer);
+      fitResizeTimer = setTimeout(function () {
+        fitResizeTimer = 0;
+        refreshPosterWidths();
+        if (fitEnabled()) recomputeFit();
+      }, 150);
     });
     window.addEventListener('blur', hideTrash);
 
@@ -2795,6 +3390,8 @@
       ui.drawerColorGroup.addEventListener('click', function (e) {
         var sw = e.target && e.target.closest ? e.target.closest('[data-color]') : null;
         if (!sw || !drawer.id) return;
+        var swCard = getCard(drawer.id);
+        if (swCard && normCourse(swCard.course)) return;
         e.preventDefault();
         var color = sw.dataset.color;
         if (COLORS.indexOf(color) === -1) return;
@@ -3335,9 +3932,8 @@
     renderPresence();
     setConn('connecting');
     exposeApi();
-    /* warm the Supabase config request in parallel with the local-API probe so static
-       hosting does not pay for a sequential round trip after the 404 */
-    getSupabaseConfig();
+    /* Supabase config is only probed after the local API probe fails (detectSupabase),
+       so an HTTP-hosted wall does not log a 404 for the optional config file. */
     boot();
     startHeartbeat();
     schedulePresence(true);
@@ -3361,12 +3957,14 @@
       }
     }
     var colors = ui.drawerColorGroup;
-    if (colors && !colors.querySelector('[data-color]')) {
+    if (colors) {
       for (var c = 0; c < COLORS.length; c++) {
+        if (colors.querySelector('[data-color="' + COLORS[c] + '"]')) continue;
         var b = el('button', 'swatch swatch-' + COLORS[c]);
         b.type = 'button';
         b.dataset.color = COLORS[c];
-        b.setAttribute('aria-label', 'Paper colour: ' + COLORS[c]);
+        var paper = COLORS[c].charAt(0).toUpperCase() + COLORS[c].slice(1);
+        b.setAttribute('aria-label', paper + ' paper');
         b.setAttribute('aria-pressed', 'false');
         colors.appendChild(b);
       }

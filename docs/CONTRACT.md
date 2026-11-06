@@ -68,7 +68,7 @@ Card:
   "notes": "Free text",
   "link": "https://...",
   "x": 70, "y": 90, "w": 360, "rot": -1.4, "z": 1,
-  "color": "bone | blush | sage | sky | butter",
+  "color": "bone | blush | sage | sky | butter | kraft | lilac",
   "mode": "group | individual",
   "done": false,
   "createdAt": "2026-11-04T12:00:00.000Z",
@@ -79,6 +79,10 @@ Card:
 - `x,y` are pixels inside #wallCanvas (logical canvas 2200 x 1600, scrollable).
 - `w` is width in px (300–460). Card height is auto; never persist height.
 - `rot` is degrees, keep -3..3. `z` stacking order. `color` controls paper tint.
+- Paper colour follows the course: the client derives a deterministic paper per unique
+  course (djb2 hash of the normalised code, collisions probed over the sorted code set),
+  so every client shows the same colour. `color` is the fallback for course-less cards
+  and is still persisted/validated; the drawer disables the swatches when a course is set.
 - Server may add/normalise fields but must preserve unknown card fields it receives.
 - Limits: 400 cards, title <= 200 chars, brief/notes <= 4000, requirement text <= 200,
   max 40 requirements per card.
@@ -197,7 +201,8 @@ Drawer edits autosave (debounce 350ms) via `card.upsert`; no Save button.
 
 - Dark wall #1B1915 (warm graphite), subtle 40px grid + paper grain overlay.
 - Poster papers: bone #EFE8D8, blush #F2D8CE, sage #D9E2CE, sky #D7E2E8,
-  butter #F0E3BB; all with ink #171410 and a hairline rule.
+  butter #F0E3BB, kraft #E6D5B8, lilac #DED7E6; all with ink #171410 and a hairline
+  rule. Colour is a course key, not decoration: seven papers cover a seven-course term.
 - Accent vermilion #E8451F (primary actions, today/late), secondary teal #1F6B5E
   used sparingly. UI text on wall: #F4EEE2 / #A79E8C.
 - Fonts self-hosted woff2 in public/fonts + @font-face + system fallback:
@@ -209,12 +214,20 @@ Drawer edits autosave (debounce 350ms) via `card.upsert`; no Save button.
 - Sharp-ish corners (2-4px), hard paper shadows, 1px ink rules, tape strip on cards,
   slight rotation. No purple, no glass cards, no gradients as decoration.
 - Layout: masthead (brand left, stats+presence+actions right), deadline rail as a
-  scrollable filmstrip of the next 8 deadlines, sticky toolbar with filter chips and
-  search, freeform canvas stage, right drawer 420px (full-screen < 900px).
-- Responsive: <900px agenda default, toolbar wraps, drawer full-screen, no horizontal
-  page overflow; canvas still pannable/scrollable on desktop.
+  scrollable filmstrip of the next 8 deadlines, toolbar with filter chips, course/status
+  selects and search, freeform canvas stage, right drawer 420px (full-screen < 900px).
+  The chrome condenses on stage scroll (masthead 88->58px, rail 124->72px).
+  Agenda: at >=1200px a two-column layout — deadline groups left, a sticky course
+  overview (overdue/this-week/done counts, per-course paper swatch, poster count and
+  requirement progress; course rows double as filters) right. Single column below.
+- Responsive: <900px agenda default, toolbar becomes two rows (the filter strip scrolls
+  horizontally), drawer full-screen, no horizontal page overflow; canvas still
+  pannable/scrollable on desktop and phones (rail hidden in the mobile agenda view).
 - States: loading, empty, offline banner, toasts, hover/active/focus-visible,
   reduced-motion. Contrast: body text >= 4.5:1.
+- Navigation: Fit control / F key zooms the wall out so every poster is in view
+  (scale floor 0.16 on narrow stages, 0.35 on desktop); arrow keys nudge a focused
+  poster 10px (Shift 40px) for keyboard users.
 - Motion: 160–220ms cubic-bezier(.2,.7,.2,1); poster hover lift 3px; drag tilt to 0;
   drawer transform slide; toast fade; no infinite decorative animation.
 

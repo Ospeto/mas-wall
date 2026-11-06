@@ -81,6 +81,8 @@
   --paper-sage: #d9e2ce;
   --paper-sky: #d7e2e8;
   --paper-butter: #f0e3bb;
+  --paper-kraft: #e6d5b8;
+  --paper-lilac: #ded7e6;
 
   /* accents */
   --accent: #e8451f;
@@ -88,6 +90,8 @@
   --accent-deep: #ae2f17;
   --teal: #1f6b5e;
   --teal-light: #45a08d;
+  /* teal for text printed on paper: #1f6b5e drops to 4.39:1 on kraft */
+  --teal-ink: #1b5f53;
 
   /* type colours on the wall */
   --text: #f4eee2;
@@ -655,14 +659,14 @@ select option {
 .presence-list {
   display: flex;
   align-items: center;
-  padding-left: 8px;
+  gap: 5px;
+  padding-left: 4px;
 }
 .presence-list > * {
   width: 26px;
   height: 26px;
   display: grid;
   place-items: center;
-  margin-left: -7px;
   border: 2px solid var(--wall);
   border-radius: 2px;
   background: var(--paper-bone);
@@ -693,12 +697,62 @@ select option {
   margin-left: auto;
 }
 
+/* --------- condensed chrome: .is-compact is toggled on #app by app.js while
+   #stage is scrolled. Heights animate; reduced-motion kills them globally. */
+.masthead,
+.deadline-strip,
+.deadline-rail {
+  transition: min-height var(--dur) var(--ease),
+    padding var(--dur) var(--ease), background-color var(--dur) var(--ease);
+}
+.wall-subtitle {
+  transition: opacity var(--dur) var(--ease), max-height var(--dur) var(--ease),
+    margin var(--dur) var(--ease);
+}
+.wall-title {
+  transition: font-size var(--dur) var(--ease);
+}
+.rail-day {
+  transition: font-size var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.app.is-compact .masthead {
+  min-height: 58px;
+  padding-block: 6px;
+}
+.app.is-compact .wall-title {
+  font-size: 26px;
+}
+.app.is-compact .wall-subtitle {
+  opacity: 0;
+  max-height: 0;
+  margin-top: 0;
+  overflow: hidden;
+}
+
 /* ------------------------------------------------------ 07 deadline rail */
 .deadline-strip {
   position: relative;
   z-index: 18;
   background: var(--wall-2);
   border-bottom: 1px solid var(--rule);
+}
+/* right-edge fade: the rail is a horizontal scroller, so it should look cut off
+   rather than finished. Decorative only — never steals a hit test. */
+.deadline-strip::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 64px;
+  z-index: 3;
+  pointer-events: none;
+  background: linear-gradient(
+    to right,
+    rgba(33, 30, 25, 0) 0%,
+    rgba(33, 30, 25, 0.82) 55%,
+    var(--wall-2) 100%
+  );
 }
 .deadline-rail {
   display: flex;
@@ -767,7 +821,8 @@ select option {
   color: inherit;
   text-decoration: none;
   scroll-snap-align: start;
-  transition: background var(--dur) var(--ease);
+  transition: background var(--dur) var(--ease),
+    min-height var(--dur) var(--ease), padding var(--dur) var(--ease);
   min-height: var(--rail-h);
 }
 .rail-item::before {
@@ -822,7 +877,7 @@ select option {
   font: 500 9px/1.4 var(--font-mono);
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--text-faint);
+  color: var(--text-dim);
   white-space: nowrap;
 }
 .rail-when {
@@ -850,30 +905,86 @@ select option {
 .rail-item[data-urgency="soon"] .rail-when {
   color: var(--teal-light);
 }
+/* "done" is filed paper, not faded UI: colour carries the state, so the
+   text keeps its contrast (an opacity veil dropped the day numeral to ~2.7:1). */
 .rail-item[data-urgency="done"] {
-  opacity: 0.55;
+  color: var(--text-dim);
+}
+.rail-item[data-urgency="done"] .rail-day,
+.rail-item[data-urgency="done"] .rail-when {
+  color: var(--text-dim);
 }
 .rail-item[data-urgency="done"] .rail-title {
+  color: var(--text-dim);
   text-decoration: line-through;
   text-decoration-thickness: 1px;
+}
+.rail-item[data-urgency="done"]:hover {
+  color: var(--text-dim);
+}
+
+/* condensed rail: 124px -> 72px, course line drops, day numeral steps down */
+.app.is-compact .deadline-strip {
+  --rail-h: 72px;
+}
+.app.is-compact .rail-item {
+  grid-template-areas:
+    "day month"
+    "title when";
+  grid-template-rows: auto auto;
+  gap: 2px 10px;
+  padding: 5px 16px;
+}
+.app.is-compact .rail-day {
+  font-size: 30px;
+}
+.app.is-compact .rail-course {
+  display: none;
 }
 
 /* --------------------------------------------------------- 08 toolbar */
 .toolbar {
-  position: sticky;
-  top: 0;
   z-index: 40;
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
   padding: 9px clamp(14px, 2vw, 30px);
   background: var(--wall);
   border-bottom: 1px solid var(--rule);
 }
+/* the toolbar is a flex item, never a sticky one: it sits outside #stage's
+   scrollport, so sticky/top:0 here did nothing. Layout is two halves. */
+.toolbar-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.toolbar-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  min-width: 0;
+  margin-left: auto;
+}
+/* one-row scroller: chips slide instead of wrapping the toolbar */
 .chip-set {
   display: flex;
   gap: 6px;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 4px 0;
+  margin: -4px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.chip-set::-webkit-scrollbar {
+  display: none;
 }
 .chip {
   height: 29px;
@@ -921,9 +1032,10 @@ select option {
 }
 .search {
   position: relative;
-  flex: 1 1 180px;
+  flex: 0 1 auto;
+  width: 260px;
   min-width: 120px;
-  max-width: 340px;
+  max-width: 260px;
 }
 .search input {
   height: 29px;
@@ -943,6 +1055,36 @@ select option {
   border-radius: 2px;
   padding: 2px 4px;
   pointer-events: none;
+}
+
+/* fit-to-wall toggle — same language as the chips; aria-pressed is set by app.js */
+.toolbar .btn-fit {
+  flex: none;
+  height: 29px;
+  min-height: 29px;
+  padding: 0 10px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  color: var(--text-dim);
+  font: 600 9.5px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.toolbar .btn-fit:not([aria-pressed="true"]):hover {
+  color: var(--text);
+  border-color: var(--rule-strong);
+  background: rgba(244, 238, 226, 0.07);
+}
+.toolbar .btn-fit[aria-pressed="true"] {
+  background: var(--paper-bone);
+  border-color: var(--paper-bone);
+  color: var(--ink);
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.35);
+}
+.toolbar .btn-fit[aria-pressed="true"]:hover {
+  background: var(--paper-bone);
+  color: var(--ink);
 }
 .view-toggle {
   display: flex;
@@ -1136,7 +1278,7 @@ select option {
   font: 500 9.5px/1.6 var(--font-mono);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(23, 20, 16, 0.55);
+  color: rgba(23, 20, 16, 0.68);
 }
 .wall-empty-hint kbd {
   border-color: rgba(23, 20, 16, 0.3);
@@ -1170,24 +1312,32 @@ select option {
   transition: transform 190ms var(--ease), box-shadow 190ms var(--ease);
 }
 .poster[data-color="bone"] {
-  --paper: #efe8d8;
+  --paper: var(--paper-bone);
   --paper-line: rgba(23, 20, 16, 0.34);
 }
 .poster[data-color="blush"] {
-  --paper: #f2d8ce;
+  --paper: var(--paper-blush);
   --paper-line: rgba(23, 20, 16, 0.3);
 }
 .poster[data-color="sage"] {
-  --paper: #d9e2ce;
+  --paper: var(--paper-sage);
   --paper-line: rgba(23, 20, 16, 0.3);
 }
 .poster[data-color="sky"] {
-  --paper: #d7e2e8;
+  --paper: var(--paper-sky);
   --paper-line: rgba(23, 20, 16, 0.3);
 }
 .poster[data-color="butter"] {
-  --paper: #f0e3bb;
+  --paper: var(--paper-butter);
   --paper-line: rgba(23, 20, 16, 0.32);
+}
+.poster[data-color="kraft"] {
+  --paper: var(--paper-kraft);
+  --paper-line: rgba(23, 20, 16, 0.32);
+}
+.poster[data-color="lilac"] {
+  --paper: var(--paper-lilac);
+  --paper-line: rgba(23, 20, 16, 0.3);
 }
 
 /* tape ------------------------------------------------------------------ */
@@ -1257,7 +1407,7 @@ select option {
 .poster-kind::before {
   content: "/";
   margin: 0 6px;
-  color: var(--accent);
+  color: var(--accent-deep);
   font-weight: 600;
 }
 .poster-mode {
@@ -1279,7 +1429,7 @@ select option {
   background: rgba(232, 69, 31, 0.08);
 }
 .poster[data-type="presentation"] .poster-kind {
-  color: var(--teal);
+  color: var(--teal-ink);
 }
 .poster-open {
   position: relative;
@@ -1314,17 +1464,22 @@ select option {
 
 /* title ----------------------------------------------------------------- */
 .poster-title {
-  margin: 0 0 11px;
-  font: 800 21px/1.13 var(--font-ui);
-  letter-spacing: -0.022em;
+  margin: 0 0 10px;
+  font: 800 25px/1.08 var(--font-ui);
+  letter-spacing: -0.024em;
   color: var(--ink);
   text-wrap: balance;
-  min-height: 2.26em;
+  min-height: 2.16em;
   cursor: text;
 }
 .poster-title:focus-visible {
   outline: 2px solid var(--accent-deep);
   outline-offset: 3px;
+}
+/* the global --focus ring is #ff7a52 = 2.11:1 on bone; on paper the ring has to
+   be the deep vermilion (4.81:1 worst case, on blush) */
+.poster :focus-visible {
+  outline-color: var(--accent-deep);
 }
 
 /* due block ------------------------------------------------------------- */
@@ -1334,14 +1489,14 @@ select option {
   grid-template-rows: auto auto;
   column-gap: 12px;
   align-items: center;
-  padding: 8px 0 9px;
-  margin-bottom: 11px;
+  padding: 5px 0;
+  margin-bottom: 9px;
   border-top: 1px solid rgba(23, 20, 16, 0.24);
   border-bottom: 1px solid rgba(23, 20, 16, 0.24);
 }
 .due-day {
   grid-row: 1 / 3;
-  font: 400 42px/0.76 var(--font-display);
+  font: 400 34px/0.76 var(--font-display);
   letter-spacing: 0.005em;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
@@ -1352,7 +1507,7 @@ select option {
   font: 600 9px/1 var(--font-mono);
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: rgba(23, 20, 16, 0.58);
+  color: rgba(23, 20, 16, 0.7);
 }
 .due-count {
   align-self: start;
@@ -1388,7 +1543,7 @@ select option {
   margin-left: -5px;
 }
 .poster-due[data-urgency="soon"] .due-count {
-  color: var(--teal);
+  color: var(--teal-ink);
   font-weight: 600;
 }
 .poster-due[data-urgency="week"] .due-count {
@@ -1511,7 +1666,7 @@ select option {
   font: 700 9.5px/1 var(--font-mono);
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(23, 20, 16, 0.7);
+  color: rgba(23, 20, 16, 0.8);
   border: 1px solid rgba(23, 20, 16, 0.26);
   border-radius: 2px;
   padding: 3px 6px;
@@ -1520,13 +1675,19 @@ select option {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* "WEIGHT" is the label, "20%" the value: the word stops a bare 20% from
+   being read as progress. 0.66 alpha = 5.2:1 worst case (blush). */
+.poster-weight::before {
+  content: "WEIGHT ";
+  color: rgba(23, 20, 16, 0.66);
+}
 .poster-progress {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   font: 500 9.5px/1 var(--font-mono);
   letter-spacing: 0.08em;
-  color: rgba(23, 20, 16, 0.66);
+  color: rgba(23, 20, 16, 0.72);
   white-space: nowrap;
 }
 .ring {
@@ -1583,59 +1744,7 @@ select option {
     0 40px 64px -28px rgba(0, 0, 0, 1);
   z-index: 9999;
 }
-@media (pointer: coarse) {
-  .poster {
-    /* Normal swipes scroll the page/wall. A long-press "lifts" the poster; app.js then
-       prevents the next touchmove so the drag (and the bin) can take over. */
-    touch-action: pan-y;
-  }
-  .btn,
-  .btn-icon,
-  .chip,
-  .view-toggle button,
-  .toolbar-selects select {
-    height: 40px;
-    min-height: 40px;
-  }
-  .btn-icon {
-    width: 40px;
-  }
-  .swatch {
-    width: 36px;
-    height: 36px;
-  }
-  .poster-open {
-    width: 30px;
-    height: 30px;
-  }
-  .poster-open::after {
-    inset: -9px;
-  }
-  .req label {
-    min-height: 28px;
-    align-items: center;
-  }
-  .req-box {
-    width: 16px;
-    height: 16px;
-    margin-top: 0;
-  }
-  .req-box::after {
-    left: 4.4px;
-    top: 1px;
-  }
-  .check {
-    min-height: 40px;
-  }
-  .check-box {
-    width: 22px;
-    height: 22px;
-  }
-  .check-box::after {
-    left: 6px;
-    top: 2px;
-  }
-}
+/* touch-only rules live in §18 (one coarse-pointer block, at the end) */
 .poster.is-done {
   padding-bottom: 33px;
 }
@@ -1669,12 +1778,8 @@ select option {
 
 /* narrow posters (340px cards) ------------------------------------------ */
 @container (max-width: 350px) {
-  .poster-title {
-    font-size: 19.5px;
-  }
-  .due-day {
-    font-size: 38px;
-  }
+  /* the hierarchy holds at every card width — 25px title, 34px numeral; only
+     the brief steps down so a narrow card keeps its line count */
   .poster-brief {
     font-size: 12.5px;
   }
@@ -1774,12 +1879,220 @@ select option {
 .agenda-item[data-urgency="soon"] .agenda-state {
   color: var(--teal-light);
 }
+/* course colour: a 3px inset edge, so the row never shifts */
+.agenda-item[data-paper] {
+  box-shadow: inset 3px 0 0 var(--item-paper, transparent);
+}
+.agenda-item[data-paper="bone"] {
+  --item-paper: var(--paper-bone);
+}
+.agenda-item[data-paper="blush"] {
+  --item-paper: var(--paper-blush);
+}
+.agenda-item[data-paper="sage"] {
+  --item-paper: var(--paper-sage);
+}
+.agenda-item[data-paper="sky"] {
+  --item-paper: var(--paper-sky);
+}
+.agenda-item[data-paper="butter"] {
+  --item-paper: var(--paper-butter);
+}
+.agenda-item[data-paper="kraft"] {
+  --item-paper: var(--paper-kraft);
+}
+.agenda-item[data-paper="lilac"] {
+  --item-paper: var(--paper-lilac);
+}
+/* "done" is filed paper, not faded UI — same fix as the rail: colour + strike,
+   no opacity veil (0.6 put the meta line at ~2.8:1) */
 .agenda-item[data-urgency="done"] {
-  opacity: 0.6;
+  color: var(--text-dim);
+}
+.agenda-item[data-urgency="done"] .agenda-day,
+.agenda-item[data-urgency="done"] .agenda-title {
+  color: var(--text-dim);
 }
 .agenda-item[data-urgency="done"] .agenda-title {
   text-decoration: line-through;
   text-decoration-thickness: 1px;
+}
+.agenda-item[data-urgency="done"] .agenda-meta,
+.agenda-item[data-urgency="done"] .agenda-state {
+  color: var(--text-faint);
+}
+
+/* course overview aside — flat, no cards-within-cards ------------------- */
+.agenda-aside {
+  display: none;
+}
+.aside-block {
+  display: grid;
+  gap: 10px;
+}
+.aside-head {
+  margin: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--rule-strong);
+  font: 600 9.5px/1 var(--font-mono);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.aside-stats {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.stat-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(244, 238, 226, 0.08);
+}
+.stat-label {
+  font: 400 12.5px/1.3 var(--font-ui);
+  letter-spacing: 0.01em;
+  color: var(--text-dim);
+}
+.stat-value {
+  font: 400 26px/0.9 var(--font-display);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.stat-row[data-tone="late"] .stat-value {
+  color: var(--accent-hot);
+}
+.course-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.course-row {
+  --course-paper: var(--paper-bone);
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  width: 100%;
+  margin: 0;
+  padding: 10px 8px;
+  border: 0;
+  border-bottom: 1px solid rgba(244, 238, 226, 0.08);
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease);
+}
+.course-row:hover {
+  background: rgba(244, 238, 226, 0.045);
+}
+.course-row:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.course-row[aria-pressed="true"] {
+  background: rgba(244, 238, 226, 0.07);
+}
+.course-row[data-paper="bone"] {
+  --course-paper: var(--paper-bone);
+}
+.course-row[data-paper="blush"] {
+  --course-paper: var(--paper-blush);
+}
+.course-row[data-paper="sage"] {
+  --course-paper: var(--paper-sage);
+}
+.course-row[data-paper="sky"] {
+  --course-paper: var(--paper-sky);
+}
+.course-row[data-paper="butter"] {
+  --course-paper: var(--paper-butter);
+}
+.course-row[data-paper="kraft"] {
+  --course-paper: var(--paper-kraft);
+}
+.course-row[data-paper="lilac"] {
+  --course-paper: var(--paper-lilac);
+}
+.course-swatch {
+  width: 12px;
+  height: 12px;
+  margin-top: 3px;
+  border: 1px solid rgba(23, 20, 16, 0.45);
+  border-radius: 1px;
+  background: var(--course-paper);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.22);
+}
+.course-body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.course-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.course-code {
+  font: 700 11px/1.2 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.course-count {
+  font: 500 9.5px/1.2 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.course-bar {
+  height: 3px;
+  border-radius: 1px;
+  background: var(--rule);
+  overflow: hidden;
+}
+.course-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--course-paper);
+}
+.course-meta {
+  font: 400 9.5px/1.3 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* two columns once there is room for a 340px rail; gated on :has() so the
+   agenda can never reserve an empty column when app.js sends no aside (or
+   hides it in the empty state) */
+@media (min-width: 1200px) {
+  .agenda-view:has(.agenda-aside:not([hidden])) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: clamp(28px, 3vw, 56px);
+    align-items: start;
+  }
+  .agenda-view:has(.agenda-aside:not([hidden])) .agenda-groups {
+    max-width: none;
+    margin: 0;
+  }
+  .agenda-view:has(.agenda-aside:not([hidden])) .agenda-aside {
+    position: sticky;
+    top: 20px;
+    display: grid;
+    gap: 26px;
+  }
 }
 
 /* ------------------------------------------------------------ 12 drawer */
@@ -1883,8 +2196,14 @@ body.drawer-open .drawer-backdrop {
   align-content: start;
   padding: 18px 20px 10px;
 }
+/* seven papers need one clean row: the Paper field takes the full width of the
+   drawer form and the swatches wrap only if :has() is unavailable */
+.field-row:has(#drawerColorGroup) {
+  grid-template-columns: 1fr;
+}
 .swatches {
   display: flex;
+  flex-wrap: wrap;
   gap: 7px;
   align-items: center;
   min-height: 38px;
@@ -1919,6 +2238,12 @@ body.drawer-open .drawer-backdrop {
 }
 .swatch[data-color="butter"] {
   background: var(--paper-butter);
+}
+.swatch[data-color="kraft"] {
+  background: var(--paper-kraft);
+}
+.swatch[data-color="lilac"] {
+  background: var(--paper-lilac);
 }
 .swatch[aria-pressed="true"],
 .swatch[aria-checked="true"],
@@ -2297,12 +2622,6 @@ body.drawer-open .drawer-backdrop {
     transform: none;
   }
 }
-@media (pointer: coarse) {
-  .toast-undo {
-    min-height: 32px;
-    padding: 6px 10px;
-  }
-}
 
 /* ----------------------------------------------------------- 14 dialogs */
 .dialog {
@@ -2492,33 +2811,25 @@ body.drawer-open .drawer-backdrop {
 }
 
 @media (max-width: 1024px) {
+  /* two rows: the filter strip over the tools. The chip-set scrolls first,
+     the selects and the tools keep their size. */
   .toolbar {
-    flex-wrap: wrap;
-    row-gap: 8px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding-block: 8px;
   }
-  .chip-set {
-    order: 1;
-    flex: 1 1 100%;
-    overflow-x: auto;
-    padding-bottom: 2px;
-    scrollbar-width: none;
+  .toolbar-filters {
+    flex-wrap: nowrap;
+    min-width: 0;
   }
-  .chip-set::-webkit-scrollbar {
-    display: none;
-  }
-  .toolbar-selects {
-    order: 2;
+  .toolbar-tools {
+    margin-left: 0;
+    min-width: 0;
   }
   .search {
-    order: 3;
-    flex: 1 1 160px;
+    flex: 1 1 auto;
     max-width: none;
-  }
-  #viewToggle {
-    order: 4;
-  }
-  .conn-badge {
-    order: 5;
   }
   .agenda-view {
     padding-top: 20px;
@@ -2621,18 +2932,91 @@ body.drawer-open .drawer-backdrop {
     height: 24px;
     font-size: 9px;
   }
-  .deadline-strip::before {
-    display: none;
-  }
   .deadline-rail {
     padding-left: 0;
   }
-  .rail-item {
-    width: 200px;
-    padding: 12px 14px 11px;
+  /* compact rail on phones: two rows instead of three, 125px -> 76px */
+  .deadline-strip {
+    --rail-h: 76px;
   }
+  .deadline-rail::before {
+    width: 44px;
+    letter-spacing: 0.3em;
+  }
+  .rail-item {
+    width: 186px;
+    padding: 7px 12px 6px;
+    grid-template-areas:
+      "day month"
+      "title when";
+    grid-template-rows: auto auto;
+    gap: 1px 9px;
+  }
+  .rail-day {
+    font-size: 27px;
+  }
+  .rail-course {
+    display: none;
+  }
+  /* the agenda already lists every deadline, so the strip is redundant there */
+  #app:has(#agendaView:not([hidden])) .deadline-strip {
+    display: none;
+  }
+  /* exactly two rows: filters strip / search + fit + view + connection.
+     ~75px on a fine pointer, ~95px on touch — under the 96px budget. */
   .toolbar {
-    padding: 8px 12px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    gap: 4px;
+    padding: 4px 12px;
+  }
+  .toolbar-filters {
+    flex-wrap: nowrap;
+    gap: 8px;
+    min-width: 0;
+    padding: 4px 0;
+    margin: -4px 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    /* hidden scrollbar -> the strip needs to say "there is more to the right".
+       Alpha mask fades the last 26px; it only ever dims wall-coloured space or
+       the edge of a select, never the chips. No animation, so reduced motion
+       has nothing to disable. */
+    -webkit-mask-image: linear-gradient(
+      to right,
+      #000 calc(100% - 26px),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to right,
+      #000 calc(100% - 26px),
+      transparent 100%
+    );
+  }
+  .toolbar-filters::-webkit-scrollbar {
+    display: none;
+  }
+  .chip-set {
+    flex: none;
+    overflow: visible;
+    padding: 0;
+    margin: 0;
+  }
+  .toolbar-selects {
+    flex: none;
+  }
+  .toolbar-tools {
+    gap: 6px;
+    margin-left: 0;
+    min-width: 0;
+  }
+  .search {
+    flex: 1 1 auto;
+    min-width: 96px;
+    max-width: none;
   }
   .wall-empty {
     top: 22px;
@@ -2765,7 +3149,12 @@ body.drawer-open .drawer-backdrop {
   }
   .search {
     flex: 1 1 140px;
-    min-width: 140px;
+    min-width: 0;
+  }
+  /* fit keeps its word on phones: same language as the chips, still ~41px,
+     and the search shrinks before the row can outgrow the viewport */
+  .toolbar .btn-fit {
+    padding: 0 9px;
   }
   .view-toggle button {
     padding: 0 8px;
@@ -2851,8 +3240,8 @@ body.drawer-open .drawer-backdrop {
   border-color: var(--accent-deep);
   color: var(--paper);
 }
-.drawer.is-view .drawer-form input:disabled,
-.drawer.is-view .drawer-form input[readonly],
+.drawer.is-view .drawer-form input:not([type="checkbox"]):disabled,
+.drawer.is-view .drawer-form input:not([type="checkbox"])[readonly],
 .drawer.is-view .drawer-form textarea:disabled,
 .drawer.is-view .drawer-form textarea[readonly],
 .drawer.is-view .drawer-form select:disabled {
@@ -2876,6 +3265,25 @@ body.drawer-open .drawer-backdrop {
   padding-left: 0;
   padding-right: 0;
 }
+/* read-only rows: the box is the only "done" signal, so it keeps an edge and a
+   filled tick (>= 4.2:1 non-text, bone-on-deep 5.35:1 for the tick) instead of
+   inheriting the transparent read-only input treatment above */
+.drawer.is-view .req-edit-list input[type="checkbox"]:disabled,
+.drawer.is-view .req-edit-list input[type="checkbox"][readonly] {
+  opacity: 1;
+  cursor: default;
+  border-color: rgba(244, 238, 226, 0.5);
+  background: rgba(244, 238, 226, 0.05);
+}
+.drawer.is-view .req-edit-list input[type="checkbox"]:checked:disabled,
+.drawer.is-view .req-edit-list input[type="checkbox"]:checked[readonly] {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
+}
+.drawer.is-view .req-edit-list input[type="checkbox"]:checked:disabled::after,
+.drawer.is-view .req-edit-list input[type="checkbox"]:checked[readonly]::after {
+  border-color: var(--paper-bone);
+}
 .drawer.is-view .drawer-req-text {
   border-color: transparent !important;
   background: transparent !important;
@@ -2885,14 +3293,14 @@ body.drawer-open .drawer-backdrop {
 .drawer.is-view .field-row:has(#drawerDoneToggle) {
   display: none;
 }
+/* view mode quiets the labels; 0.55 of --text-faint measured 2.4:1, and even
+   --text-dim at 0.78 stays under 4.5 on the panel — 0.86 measures 4.98:1. */
 .drawer.is-view .drawer-form .field-label {
-  opacity: 0.55;
+  color: var(--text-dim);
+  opacity: 0.86;
 }
 .drawer.is-view .drawer-form .select-wrap::after {
   display: none;
-}
-.drawer.is-view .drawer-form .field-label {
-  opacity: 0.55;
 }
 .drawer.is-view .drawer-form button {
   display: none;
@@ -2930,3 +3338,88 @@ body.drawer-open .drawer-backdrop {
     transform: rotate(var(--rot, 0deg));
   }
 }
+
+/* -------------- 18 coarse pointers — the ONLY @media (pointer: coarse) block
+   in this file, and deliberately last: the narrow-viewport blocks above shrink
+   buttons to 32px, so every touch rule lives here and wins by order. Add new
+   touch rules here, never in a new coarse block. */
+@media (pointer: coarse) {
+  /* controls */
+  .btn,
+  .btn-icon,
+  .chip,
+  .view-toggle button,
+  .toolbar-selects select,
+  .toolbar .btn-fit {
+    height: 40px;
+    min-height: 40px;
+  }
+  .chip {
+    min-width: 40px;
+  }
+  /* all icon buttons (help, drawer close, …), not just the header row */
+  .btn-icon {
+    width: 40px;
+    min-width: 40px;
+  }
+  /* header icons must beat the 32px shrink rules, including .btn-me's max-width */
+  #btnMe,
+  #btnShare,
+  #btnLock,
+  .masthead-actions .btn-icon {
+    width: 40px;
+    min-width: 40px;
+    max-width: 40px;
+    height: 40px;
+  }
+  .search input {
+    height: 40px;
+    min-height: 40px;
+  }
+  .swatch {
+    width: 40px;
+    height: 40px;
+  }
+  .toast-undo {
+    min-height: 32px;
+    padding: 6px 10px;
+  }
+
+  /* the wall itself: normal swipes scroll, a long-press "lifts" a poster and
+     app.js then prevents the next touchmove so the drag (and the bin) take over */
+  .poster {
+    touch-action: pan-y;
+  }
+  .poster-open {
+    width: 30px;
+    height: 30px;
+  }
+  .poster-open::after {
+    inset: -9px;
+  }
+  .req label {
+    min-height: 28px;
+    align-items: center;
+  }
+  .req-box {
+    width: 16px;
+    height: 16px;
+    margin-top: 0;
+  }
+  .req-box::after {
+    left: 4.4px;
+    top: 1px;
+  }
+  .check {
+    min-height: 40px;
+  }
+  .check-box {
+    width: 22px;
+    height: 22px;
+  }
+  .check-box::after {
+    left: 6px;
+    top: 2px;
+  }
+}
+/* nothing after this block: the coarse-pointer rules above are the last word */

@@ -94,44 +94,52 @@
        TOOLBAR  ·  filters, search, view switch, connection state
        =================================================================== -->
   <div id="toolbar" class="toolbar" role="toolbar" aria-label="Filter and search posters">
-    <div id="filterType" class="chip-set" role="group" aria-label="Filter by type">
-      <button class="chip" type="button" data-type-filter="all" aria-pressed="true">All</button>
-      <button class="chip" type="button" data-type-filter="assignment" aria-pressed="false">Assignments</button>
-      <button class="chip" type="button" data-type-filter="presentation" aria-pressed="false">Presentations</button>
-      <button class="chip" type="button" data-type-filter="other" aria-pressed="false">Other</button>
-    </div>
-
-    <div class="toolbar-selects">
-      <div class="select-wrap">
-        <label class="sr-only" for="filterCourse">Course</label>
-        <select id="filterCourse">
-          <option value="all">All courses</option>
-        </select>
+    <div class="toolbar-filters">
+      <div id="filterType" class="chip-set" role="group" aria-label="Filter by type">
+        <button class="chip" type="button" data-type-filter="all" aria-pressed="true">All</button>
+        <button class="chip" type="button" data-type-filter="assignment" aria-pressed="false">Assignments</button>
+        <button class="chip" type="button" data-type-filter="presentation" aria-pressed="false">Presentations</button>
+        <button class="chip" type="button" data-type-filter="other" aria-pressed="false">Other</button>
       </div>
-      <div class="select-wrap">
-        <label class="sr-only" for="filterStatus">Status</label>
-        <select id="filterStatus">
-          <option value="all">Any status</option>
-          <option value="open">Open</option>
-          <option value="done">Done</option>
-          <option value="late">Late</option>
-          <option value="week">This week</option>
-        </select>
+
+      <div class="toolbar-selects">
+        <div class="select-wrap">
+          <label class="sr-only" for="filterCourse">Course</label>
+          <select id="filterCourse">
+            <option value="all">All courses</option>
+          </select>
+        </div>
+        <div class="select-wrap">
+          <label class="sr-only" for="filterStatus">Status</label>
+          <select id="filterStatus">
+            <option value="all">Any status</option>
+            <option value="open">Open</option>
+            <option value="done">Done</option>
+            <option value="late">Late</option>
+            <option value="week">This week</option>
+          </select>
+        </div>
       </div>
     </div>
 
-    <div class="search">
-      <label class="sr-only" for="searchInput">Search posters</label>
-      <input id="searchInput" type="search" placeholder="Search titles, courses, notes" autocomplete="off" spellcheck="false" />
-      <kbd class="search-key" aria-hidden="true">/</kbd>
-    </div>
+    <div class="toolbar-tools">
+      <div class="search">
+        <label class="sr-only" for="searchInput">Search posters</label>
+        <input id="searchInput" type="search" placeholder="Search titles, courses, notes" autocomplete="off" spellcheck="false" />
+        <kbd class="search-key" aria-hidden="true">/</kbd>
+      </div>
 
-    <div id="viewToggle" class="view-toggle" role="group" aria-label="View">
-      <button type="button" data-view="wall" aria-pressed="true">Wall</button>
-      <button type="button" data-view="agenda" aria-pressed="false">Agenda</button>
-    </div>
+      <button id="btnFit" class="btn btn-fit" type="button" aria-pressed="false" title="Zoom out to see the whole wall (F)">
+        <span class="btn-label">Fit</span>
+      </button>
 
-    <span id="connBadge" class="conn-badge" data-state="connecting" role="status">Connecting</span>
+      <div id="viewToggle" class="view-toggle" role="group" aria-label="View">
+        <button type="button" data-view="wall" aria-pressed="true">Wall</button>
+        <button type="button" data-view="agenda" aria-pressed="false">Agenda</button>
+      </div>
+
+      <span id="connBadge" class="conn-badge" data-state="connecting" role="status">Connecting</span>
+    </div>
   </div>
 
   <div id="offlineBanner" class="offline-banner" role="status" hidden>
@@ -307,6 +315,7 @@
        TOASTS + DIALOGS
        =================================================================== -->
   <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
+  <div id="srLive" class="sr-only" role="status" aria-live="polite"></div>
 
   <dialog id="unlockDialog" class="dialog" aria-labelledby="unlockTitle">
     <form class="dialog-inner" method="dialog">
@@ -352,6 +361,8 @@
         <div class="key-row"><dt><kbd>?</kbd></dt><dd>This panel</dd></div>
         <div class="key-row"><dt><kbd>Esc</kbd></dt><dd>Close drawer or dialog</dd></div>
         <div class="key-row"><dt><kbd>Drag</kbd></dt><dd>Move a poster anywhere on the wall</dd></div>
+        <div class="key-row"><dt><kbd>← ↑ → ↓</kbd></dt><dd>Nudge the focused poster (Shift = 40px)</dd></div>
+        <div class="key-row"><dt><kbd>F</kbd></dt><dd>Fit the whole wall in view</dd></div>
       </dl>
       <p class="dialog-copy dialog-copy-tight">Viewing is open to anyone with the link; adding, editing, dragging and deleting need the class password.</p>
       <div class="dialog-actions">
