@@ -371,8 +371,28 @@
     </div>
   </dialog>
 
+  <dialog id="shareDialog" class="dialog share-dialog" aria-labelledby="shareTitle">
+    <div class="dialog-inner">
+      <p class="dialog-kicker">Pass it on</p>
+      <h2 id="shareTitle" class="dialog-title">Share the wall</h2>
+      <p class="dialog-copy">Anyone with this link can view the wall. Editing needs the class password, which is shared separately.</p>
+      <div class="share-grid">
+        <div id="shareQr" class="share-qr" role="img" aria-label="QR code linking to this wall"></div>
+        <div class="share-link">
+          <label class="field-label" for="shareUrl">Link</label>
+          <input id="shareUrl" type="text" readonly />
+          <button id="shareCopy" class="btn btn-primary" type="button">Copy link</button>
+        </div>
+      </div>
+      <div class="dialog-actions">
+        <button id="shareClose" class="btn btn-ghost" type="button">Done</button>
+      </div>
+    </div>
+  </dialog>
+
 </div>
 
+<script src="vendor/qrcode-generator.js" defer></script>
 <script src="app.js" defer></script>
 </body>
 </html>

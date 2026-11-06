@@ -179,7 +179,7 @@
   /* -------------------------------- state --------------------------------- */
   const state = {
     rev: 0,
-    course: { title: 'MAS WALL', subtitle: 'Assignments, presentations & everything due', term: '' },
+    course: { title: 'MAS WALL', subtitle: 'Assignments, presentations & everything due', term: '', papers: {} },
     cards: [],
     index: new Map(),
     pendingCards: new Map(),
@@ -226,7 +226,8 @@
     'drawerNotesInput', 'drawerLinkInput', 'drawerColorGroup', 'colorGroupLabel', 'drawerDoneToggle', 'drawerForm',
     'drawerDueBadge', 'drawerProgress', 'drawerReqs', 'btnAddReq', 'btnDuplicateCard',
     'btnDeleteCard', 'drawerSaveState', 'drawerClose', 'drawerTitle', 'drawerEditBtn', 'drawerForm',
-    'btnLock', 'unlockDialog', 'unlockInput', 'unlockError', 'unlockSubmit', 'unlockCancel'
+    'btnLock', 'unlockDialog', 'unlockInput', 'unlockError', 'unlockSubmit', 'unlockCancel',
+    'shareDialog', 'shareUrl', 'shareQr', 'shareCopy', 'shareClose'
   ];
   function cacheDom() {
     for (var i = 0; i < DOM_IDS.length; i++) {
@@ -266,48 +267,118 @@
 
 
   /* ------------------------- course -> paper colour ----------------------- */
-  /* Deterministic on every client: djb2(normalised course) picks the preferred
-     paper; collisions probe the next free slot over the alphabetically sorted
-     course codes, so the same card set always yields the same mapping. */
+  /* state.course.papers is authoritative. Courses missing from it are assigned
+     deterministically: djb2 preference over the 7 papers, linear-probed over
+     the colours already persisted/assigned, codes visited alphabetically, so
+     every client - guest or editor - derives the same map. Renamed courses
+     keep their old entry (harmless) and are never deleted here. */
   function normCourse(c) { return String(c == null ? '' : c).trim().toUpperCase().replace(/\s+/g, ' '); }
   function djb2(str) {
     var h = 5381;
     for (var i = 0; i < str.length; i++) h = (((h << 5) + h) + str.charCodeAt(i)) >>> 0;
     return h;
   }
-  var paperMap = new Map();
-  var paperRevision = -1;
-  var paperVersion = 0;
-  function bumpPaperVersion() { paperVersion++; }
-  function rebuildPaperMap() {
+  function normalisedPapers() {
+    var raw = state.course && state.course.papers;
+    var out = {};
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+    var keys = Object.keys(raw);
+    for (var i = 0; i < keys.length; i++) {
+      var code = normCourse(keys[i]);
+      var paper = raw[keys[i]];
+      if (code && COLORS.indexOf(paper) >= 0) out[code] = paper;
+    }
+    return out;
+  }
+  var paperCache = null;
+  var papersWriteTimer = 0;
+  var papersRetryTimer = 0;
+  var papersRetry = 0;
+  function invalidatePapers() { paperCache = null; }
+  function buildPaperState() {
+    var persisted = normalisedPapers();
     var seen = {};
+    var codes = [];
     for (var i = 0; i < state.cards.length; i++) {
       var code = normCourse(state.cards[i].course);
-      if (code) seen[code] = true;
+      if (code && !seen[code]) { seen[code] = true; codes.push(code); }
     }
-    var codes = Object.keys(seen).sort();
-    paperMap = new Map();
+    codes.sort();
+    var map = new Map();
     var used = {};
-    var span = COLORS.length;
-    for (var j = 0; j < codes.length; j++) {
-      var slot = djb2(codes[j]) % span;
-      var step = 0;
-      while (used[slot] && step < span) { slot = (slot + 1) % span; step++; }
-      used[slot] = true;
-      paperMap.set(codes[j], COLORS[slot]);
+    var persistedCodes = Object.keys(persisted).sort();
+    for (var p = 0; p < persistedCodes.length; p++) {
+      map.set(persistedCodes[p], persisted[persistedCodes[p]]);
+      used[persisted[persistedCodes[p]]] = true;
     }
-    paperRevision = paperVersion;
+    var fresh = [];
+    for (var c = 0; c < codes.length; c++) {
+      if (map.has(codes[c])) continue;
+      var slot = djb2(codes[c]) % COLORS.length;
+      var step = 0;
+      while (used[COLORS[slot]] && step < COLORS.length) { slot = (slot + 1) % COLORS.length; step++; }
+      map.set(codes[c], COLORS[slot]);
+      used[COLORS[slot]] = true;
+      fresh.push(codes[c]);
+    }
+    return { map: map, persisted: persisted, fresh: fresh };
+  }
+  function paperAssignments() {
+    if (!paperCache) {
+      paperCache = buildPaperState();
+      schedulePapersWrite(paperCache);
+    }
+    return paperCache;
   }
   function paperForCourse(course) {
     var code = normCourse(course);
     if (!code) return '';
-    if (paperRevision !== paperVersion) rebuildPaperMap();
-    return paperMap.get(code) || '';
+    return paperAssignments().map.get(code) || '';
   }
   function effectiveColor(card) {
     if (!card) return 'bone';
     var own = COLORS.indexOf(card.color) >= 0 ? card.color : 'bone';
     return paperForCourse(card.course) || own;
+  }
+  /* one debounced write per burst; the full map is sent so persisted entries
+     (including renamed courses) survive the server's replace semantics */
+  function schedulePapersWrite(ps) {
+    if (!ps || !ps.fresh.length || !state.unlocked) return;
+    if (state.conn !== 'live' && state.conn !== 'polling') {
+      /* wait until the server state (and its persisted map) has landed */
+      if (!papersRetryTimer && papersRetry < 5) {
+        papersRetry++;
+        papersRetryTimer = setTimeout(function () {
+          papersRetryTimer = 0;
+          if (!state.unlocked) return;
+          schedulePapersWrite(paperAssignments());
+        }, 600);
+      }
+      return;
+    }
+    papersRetry = 0;
+    if (papersWriteTimer) return;
+    papersWriteTimer = setTimeout(function () {
+      papersWriteTimer = 0;
+      persistPapers();
+    }, 400);
+  }
+  function papersPayload() {
+    var full = {};
+    var persisted = normalisedPapers();
+    var keys = Object.keys(persisted);
+    for (var i = 0; i < keys.length; i++) full[keys[i]] = persisted[keys[i]];
+    paperAssignments().map.forEach(function (paper, code) { full[code] = paper; });
+    return full;
+  }
+  function persistPapers() {
+    if (!state.unlocked) return;
+    var ps = paperAssignments();
+    if (!ps.fresh.length) return;
+    var full = papersPayload();
+    state.course.papers = full;
+    invalidatePapers();
+    postOp({ op: 'course.update', course: { papers: full } });
   }
 
   /* ------------------------------ trash zone ------------------------------ */
@@ -739,7 +810,9 @@
       case 'course.update':
         if (data.course && typeof data.course === 'object') {
           state.course = normaliseCourse(data.course);
-          renderChrome();
+          invalidatePapers();
+          renderAll();
+          updateColorSwatches();
           queueCacheSave();
         }
         break;
@@ -881,12 +954,22 @@
     var course = {
       title: 'MAS WALL',
       subtitle: 'Assignments, presentations & everything due',
-      term: ''
+      term: '',
+      papers: {}
     };
     if (raw && typeof raw === 'object') {
       if (typeof raw.title === 'string' && raw.title.trim()) course.title = limit(raw.title.trim(), 80);
       if (typeof raw.subtitle === 'string') course.subtitle = limit(raw.subtitle.trim(), 160);
       if (typeof raw.term === 'string') course.term = limit(raw.term.trim(), 80);
+      var rawPapers = raw.papers;
+      if (rawPapers && typeof rawPapers === 'object' && !Array.isArray(rawPapers)) {
+        var keys = Object.keys(rawPapers);
+        for (var i = 0; i < keys.length; i++) {
+          var code = normCourse(keys[i]);
+          var paper = rawPapers[keys[i]];
+          if (code && COLORS.indexOf(paper) >= 0) course.papers[code] = paper;
+        }
+      }
     }
     return course;
   }
@@ -927,7 +1010,7 @@
       state.cards.push(card);
     }
     state.index.set(card.id, card);
-    bumpPaperVersion();
+    invalidatePapers();
     return true;
   }
   function dropCard(id) {
@@ -937,7 +1020,7 @@
     var at = state.cards.indexOf(card);
     if (at >= 0) state.cards.splice(at, 1);
     state.pendingCards.delete(id);
-    bumpPaperVersion();
+    invalidatePapers();
     return true;
   }
   function nextZ() {
@@ -988,7 +1071,7 @@
       }
     }
     overlayPendingCards();
-    bumpPaperVersion();
+    invalidatePapers();
   }
 
   /* --------------------------- localStorage cache ------------------------- */
@@ -3053,6 +3136,71 @@
     }
   }
 
+  function copyShareUrl() {
+    var url = window.location.href;
+    var done = function () { toast('Link copied'); };
+    var failed = function () {
+      var ok = fallbackCopy(url);
+      if (ok) done(); else toast('Copy failed - select the link instead', 'error');
+    };
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      navigator.clipboard.writeText(url).then(done, failed);
+    } else {
+      failed();
+    }
+  }
+  /* inline SVG QR: 4-module quiet zone, one square per dark module */
+  function renderShareQr(url) {
+    var host = ui.shareQr;
+    if (!host) return false;
+    host.textContent = '';
+    host.hidden = false;
+    try {
+      if (typeof window.qrcode !== 'function') { host.hidden = true; return false; }
+      var qr = window.qrcode(0, 'M');
+      qr.addData(String(url));
+      qr.make();
+      var count = qr.getModuleCount();
+      if (!count) { host.hidden = true; return false; }
+      var pad = 4;
+      var total = count + pad * 2;
+      var ns = 'http://www.w3.org/2000/svg';
+      var svg = document.createElementNS(ns, 'svg');
+      svg.setAttribute('viewBox', '0 0 ' + total + ' ' + total);
+      svg.setAttribute('shape-rendering', 'crispEdges');
+      svg.setAttribute('role', 'img');
+      svg.setAttribute('aria-label', 'QR code for this wall link');
+      for (var r = 0; r < count; r++) {
+        for (var c = 0; c < count; c++) {
+          if (!qr.isDark(r, c)) continue;
+          var rect = document.createElementNS(ns, 'rect');
+          rect.setAttribute('x', String(c + pad));
+          rect.setAttribute('y', String(r + pad));
+          rect.setAttribute('width', '1');
+          rect.setAttribute('height', '1');
+          rect.setAttribute('fill', 'currentColor');
+          svg.appendChild(rect);
+        }
+      }
+      host.appendChild(svg);
+      return true;
+    } catch (e) {
+      host.textContent = '';
+      host.hidden = true;
+      return false;
+    }
+  }
+  function openShare() {
+    if (ui.shareUrl) ui.shareUrl.value = window.location.href;
+    renderShareQr(window.location.href);
+    openDialog(ui.shareDialog);
+    if (ui.shareUrl) {
+      try { ui.shareUrl.focus({ preventScroll: true }); ui.shareUrl.select(); }
+      catch (e) { try { ui.shareUrl.focus(); } catch (e2) {} }
+    }
+  }
+
+
   /* ------------------------------- dialogs -------------------------------- */
   function dialogOpen(dlg) { return !!(dlg && (dlg.open || dlg.hasAttribute('open'))); }
   function openDialog(dlg) {
@@ -3197,6 +3345,7 @@
     if (dialogOpen(ui.unlockDialog)) { closeUnlock(); return; }
     if (dialogOpen(ui.nameDialog)) { closeDialog(ui.nameDialog); return; }
     if (dialogOpen(ui.helpDialog)) { closeDialog(ui.helpDialog); return; }
+    if (dialogOpen(ui.shareDialog)) { closeDialog(ui.shareDialog); return; }
     if (drawer.id) { closeDrawer(); return; }
     var a = document.activeElement;
     if (a && a === ui.searchInput) {
@@ -3271,7 +3420,9 @@
       if (ui.unlockCancel) ui.unlockCancel.addEventListener('click', function (e) { e.preventDefault(); closeUnlock(); });
       ui.unlockDialog.addEventListener('cancel', function () { state.pendingWrite = null; });
     }
-    if (ui.btnShare) ui.btnShare.addEventListener('click', function (e) { e.preventDefault(); shareLink(); });
+    if (ui.btnShare) ui.btnShare.addEventListener('click', function (e) { e.preventDefault(); openShare(); });
+    if (ui.shareCopy) ui.shareCopy.addEventListener('click', function (e) { e.preventDefault(); copyShareUrl(); });
+    if (ui.shareClose) ui.shareClose.addEventListener('click', function (e) { e.preventDefault(); closeDialog(ui.shareDialog); });
     if (ui.btnHelp) ui.btnHelp.addEventListener('click', function (e) { e.preventDefault(); openHelp(); });
     if (ui.btnMe) ui.btnMe.addEventListener('click', function (e) { e.preventDefault(); openNameDialog(); });
     if (ui.connBadge) ui.connBadge.addEventListener('click', function () {
@@ -3426,7 +3577,7 @@
       });
     }
     if (ui.helpClose) ui.helpClose.addEventListener('click', function (e) { e.preventDefault(); closeDialog(ui.helpDialog); });
-    [ui.nameDialog, ui.helpDialog].forEach(function (dlg) {
+    [ui.nameDialog, ui.helpDialog, ui.shareDialog].forEach(function (dlg) {
       if (!dlg) return;
       dlg.addEventListener('click', function (e) {
         if (e.target === dlg) closeDialog(dlg);
@@ -3916,6 +4067,11 @@
     ensureStatusOptions();
     populateCourseFilter();
     bindEvents();
+    /* printing a cold wall load must not produce a blank sheet: the agenda
+       DOM is only built when that view is visited, so build it on demand. */
+    window.addEventListener('beforeprint', function () {
+      try { renderAgenda(); } catch (err) {}
+    });
     ensureTrash();
     renderChoiceDefaults();
     var cached = readCache();

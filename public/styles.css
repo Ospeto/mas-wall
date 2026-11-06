@@ -3460,3 +3460,242 @@ body.drawer-open .drawer-backdrop {
   }
 }
 /* nothing after this block: the coarse-pointer rules above are the last word */
+/* -------------------------------------------------- 19 share dialog */
+.share-dialog {
+  width: min(92vw, 620px);
+}
+.share-grid {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+  margin-top: 2px;
+}
+/* the QR is a pinned bone note: grain, hard shadow, a hair of rotation.
+   The rotation belongs to the paper, never to the code inside it. */
+.share-qr {
+  width: 200px;
+  height: 200px;
+  padding: 14px;
+  display: grid;
+  place-items: center;
+  background-color: var(--paper-bone);
+  background-image: var(--grain);
+  background-size: 120px 120px;
+  background-blend-mode: soft-light;
+  border: 1px solid var(--ink-line);
+  border-radius: 2px;
+  box-shadow: var(--shadow-poster);
+  color: var(--ink);
+  transform: rotate(-0.8deg);
+}
+.share-qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: none;
+  shape-rendering: crispEdges;
+}
+.share-link {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 0;
+}
+.share-link .field-label {
+  color: var(--ink-text);
+}
+.share-link input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.55);
+  border-color: var(--ink-line);
+  color: var(--ink);
+  font: 500 var(--text-meta)/1.35 var(--font-mono);
+  letter-spacing: var(--track-tight);
+}
+.share-link .btn {
+  justify-self: start;
+}
+@media (max-width: 560px) {
+  .share-dialog {
+    width: min(94vw, 460px);
+  }
+  .share-grid {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    gap: 18px;
+  }
+  .share-qr {
+    width: min(55vw, 200px);
+    height: min(55vw, 200px);
+    margin-inline: auto;
+  }
+  .share-link {
+    width: 100%;
+    justify-self: stretch;
+    justify-items: stretch;
+  }
+  .share-link .btn {
+    justify-self: start;
+  }
+}
+
+/* ------------------------------------------------------ 20 print paper */
+/* The wall is a screen object. On paper this becomes one agenda document,
+   ink on white, no grain, no chrome, whatever view the browser is showing. */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+
+  /* :root carries color-scheme: dark on screen; without beating it here the
+     print canvas stays dark and the sheet margins come out black. */
+  :root,
+  html {
+    color-scheme: light !important;
+    background: #fff !important;
+  }
+  body {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+    background-image: none !important;
+    color: #111 !important;
+    font-size: 10pt;
+  }
+  *,
+  *::before,
+  *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+    background-image: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .app {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* every piece of screen chrome */
+  .masthead,
+  .deadline-strip,
+  .toolbar,
+  .offline-banner,
+  .drawer,
+  .drawer-backdrop,
+  .toasts,
+  .trash-zone,
+  .skip-link,
+  .noscript,
+  .preview-note,
+  #wallView,
+  #wallEmpty,
+  .wall-canvas,
+  .poster,
+  .agenda-aside,
+  dialog,
+  .dialog {
+    display: none !important;
+  }
+
+  .stage {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+  /* the agenda prints even when the wall tab is the one on screen */
+  #agendaView,
+  .agenda-view {
+    display: block !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+  .agenda-groups {
+    display: block !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+  .agenda-group {
+    margin: 0 0 9mm;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .agenda-head {
+    display: flex !important;
+    align-items: baseline !important;
+    justify-content: space-between !important;
+    gap: 12px !important;
+    padding-bottom: 4px !important;
+    margin-bottom: 0 !important;
+    border-bottom: 1px solid #999 !important;
+  }
+  .agenda-label {
+    color: #111 !important;
+    font-size: 8pt !important;
+  }
+  .agenda-total {
+    color: #555 !important;
+    font-size: 8pt !important;
+  }
+  .agenda-list {
+    display: block !important;
+  }
+  .agenda-item {
+    display: grid !important;
+    grid-template-columns: 34px minmax(0, 1fr) auto !important;
+    column-gap: 10px !important;
+    align-items: baseline !important;
+    padding: 4px 0 !important;
+    border-bottom: 1px solid #d8d8d8 !important;
+    background: none !important;
+    color: #111 !important;
+    cursor: auto !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .agenda-day {
+    color: #111 !important;
+    font-size: 22px !important;
+    line-height: 0.9 !important;
+  }
+  .agenda-title {
+    color: #111 !important;
+    font-size: 10.5pt !important;
+  }
+  .agenda-meta {
+    color: #555 !important;
+    font-size: 7.5pt !important;
+  }
+  .agenda-state {
+    color: #333 !important;
+    font-size: 7.5pt !important;
+  }
+  .agenda-item[data-urgency="done"] {
+    color: #444 !important;
+  }
+  .agenda-item[data-urgency="done"] .agenda-title,
+  .agenda-item[data-urgency="done"] .agenda-day {
+    color: #444 !important;
+    text-decoration: line-through !important;
+  }
+  .agenda-item[data-urgency="done"] .agenda-meta,
+  .agenda-item[data-urgency="done"] .agenda-state {
+    color: #666 !important;
+  }
+  a {
+    color: inherit !important;
+    text-decoration: none !important;
+  }
+}

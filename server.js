@@ -258,6 +258,7 @@ function emptyState() {
       title: "MAS WALL",
       subtitle: "Assignments, presentations & everything due",
       term: "Semester 1 - 2026",
+      papers: {},
     },
     cards: [],
   };
@@ -315,14 +316,35 @@ function normalizeCard(raw, existing, touch) {
   return card;
 }
 
+function normalizeCoursePapers(raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  let n = 0;
+  for (const code of Object.keys(raw)) {
+    if (n >= 64) break;
+    if (isUnsafeKey(code)) continue;
+    const key = str(code, 32).trim().toUpperCase();
+    const paper = raw[code];
+    if (!key || CARD_COLORS.indexOf(paper) === -1) continue;
+    out[key] = paper;
+    n += 1;
+  }
+  return out;
+}
+
 function normalizeCourse(raw, base) {
   const course = Object.assign({}, base);
   if (raw && typeof raw === "object" && !Array.isArray(raw)) {
     for (const key of Object.keys(raw)) {
       if (isUnsafeKey(key)) continue;
+      if (key === "papers") {
+        course.papers = normalizeCoursePapers(raw.papers);
+        continue;
+      }
       course[key] = str(raw[key], 500);
     }
   }
+  if (!course.papers || typeof course.papers !== "object") course.papers = {};
   return course;
 }
 
@@ -739,6 +761,10 @@ function updateCourse(rawCourse) {
     if (value === undefined) continue;
     if (value === null) {
       delete next[key];
+      continue;
+    }
+    if (key === "papers") {
+      next.papers = normalizeCoursePapers(value);
       continue;
     }
     next[key] = str(value, 500);

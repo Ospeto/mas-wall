@@ -47,7 +47,8 @@ message the Lead instead.
   "course": {
     "title": "MAS WALL",
     "subtitle": "Assignments, presentations & everything due",
-    "term": "Semester 1 · 2026"
+    "term": "Semester 1 · 2026",
+    "papers": { "MAS 601": "blush", "MAS 602": "sage" }
   },
   "cards": [Card]
 }
@@ -79,10 +80,13 @@ Card:
 - `x,y` are pixels inside #wallCanvas (logical canvas 2200 x 1600, scrollable).
 - `w` is width in px (300–460). Card height is auto; never persist height.
 - `rot` is degrees, keep -3..3. `z` stacking order. `color` controls paper tint.
-- Paper colour follows the course: the client derives a deterministic paper per unique
-  course (djb2 hash of the normalised code, collisions probed over the sorted code set),
-  so every client shows the same colour. `color` is the fallback for course-less cards
-  and is still persisted/validated; the drawer disables the swatches when a course is set.
+- Paper colour follows the course. `course.papers` is the source of truth: a map of
+  upper-case course code -> one of the seven paper names. A missing code is assigned
+  deterministically (djb2 preference, linear probe over colours already in use, codes
+  iterated sorted) and persisted with one `course.update`; guests compute the same map
+  and never write. Entries are never deleted, so adding courses cannot recolour old ones.
+  `color` is the fallback for course-less cards; the drawer disables the swatches when
+  a course is set.
 - Server may add/normalise fields but must preserve unknown card fields it receives.
 - Limits: 400 cards, title <= 200 chars, brief/notes <= 4000, requirement text <= 200,
   max 40 requirements per card.
