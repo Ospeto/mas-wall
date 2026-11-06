@@ -202,7 +202,9 @@
     agendaDirty: false,
     fitScale: 1,
     fitScrollX: 0,
-    fitScrollY: 0
+    fitScrollY: 0,
+    present: false,
+    presentId: null
   };
 
   const ui = {};
@@ -227,7 +229,9 @@
     'drawerDueBadge', 'drawerProgress', 'drawerReqs', 'btnAddReq', 'btnDuplicateCard',
     'btnDeleteCard', 'drawerSaveState', 'drawerClose', 'drawerTitle', 'drawerEditBtn', 'drawerForm',
     'btnLock', 'unlockDialog', 'unlockInput', 'unlockError', 'unlockSubmit', 'unlockCancel',
-    'shareDialog', 'shareUrl', 'shareQr', 'shareCopy', 'shareClose'
+    'shareDialog', 'shareUrl', 'shareQr', 'shareCopy', 'shareClose',
+    'btnPresent', 'presentHud', 'presentLabel', 'presentPrev', 'presentNext',
+    'presentOverview', 'presentExit', 'presentHint'
   ];
   function cacheDom() {
     for (var i = 0; i < DOM_IDS.length; i++) {
@@ -857,6 +861,7 @@
     /* drag ops only move x/y/z - do not narrate a peer's whole drag */
     if (contentDiffers) announceLive(remoteActorName(incoming.id, envelope) + ' updated ' + limit(incoming.title, 40));
     scheduleFitRecompute();
+    if (state.present) schedulePresentRefresh();
   }
   function handleRemoteDelete(id, envelope) {
     if (typeof id !== 'string') return;
@@ -875,6 +880,10 @@
     updateEmptyState();
     queueCacheSave();
     scheduleFitRecompute();
+    if (state.present) {
+      if (state.presentId === id) presentOverview();
+      else schedulePresentRefresh();
+    }
   }
 
   /* ---------------------------- card normalisers -------------------------- */
@@ -1363,6 +1372,7 @@
     for (var j = 0; j < stale.length; j++) removePosterNode(stale[j]);
     updateEmptyState(list.length);
     scheduleFitRecompute();
+    if (state.present) schedulePresentRefresh();
   }
   function updateEmptyState(count) {
     var empty = ui.wallEmpty;
@@ -1750,6 +1760,7 @@
   }
   function setView(view) {
     state.view = view === 'agenda' ? 'agenda' : 'wall';
+    if (state.present && state.view !== 'wall') exitPresent();
     if (state.view === 'agenda' && fitEnabled()) disableFit(true, true);
     if (ui.wallView) ui.wallView.hidden = state.view !== 'wall';
     if (ui.agendaView) ui.agendaView.hidden = state.view !== 'agenda';
@@ -2447,6 +2458,7 @@
     if (ui.wallCanvas) ui.wallCanvas.style.removeProperty('user-select');
   }
   function onPointerDown(e) {
+    if (state.present) return;
     if (!state.unlocked) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     if (drag.active) return;
@@ -2618,6 +2630,13 @@
     if (Date.now() < suppressClickUntil) { e.preventDefault(); e.stopPropagation(); return; }
     var target = e.target;
     if (!target || !target.closest) return;
+    if (state.present) {
+      /* presenting is read-only: a click spotlights, never opens the drawer */
+      e.preventDefault();
+      var presentPoster = target.closest('.poster');
+      if (presentPoster) presentFocus(presentPoster.dataset.id);
+      return;
+    }
     var poster = target.closest('.poster');
     /* requirement rows: toggle the requirement explicitly. Relying on the label's
        default activation is unreliable because the native checkbox is visually hidden
@@ -2640,6 +2659,7 @@
     if (poster) { e.preventDefault(); openDrawer(poster.dataset.id, { mode: posterOpenMode() }); }
   }
   function onCanvasChange(e) {
+    if (state.present) return;
     var target = e.target;
     if (!target || !target.dataset || !target.dataset.reqId) return;
     var poster = target.closest('.poster');
@@ -2654,6 +2674,7 @@
     toggleRequirement(poster.dataset.id, target.dataset.reqId, !!target.checked);
   }
   function onCanvasKeydown(e) {
+    if (state.present) return;
     var target = e.target;
     if (!target || !target.classList || !target.classList.contains('poster-title')) return;
     var poster = target.closest('.poster');
@@ -2829,6 +2850,7 @@
   /* any render while fitted changes the bbox; coalesce and re-fit without
      throwing away the pan (see applyFitScale's keepCentre) */
   function scheduleFitRecompute() {
+    if (state.present) return;
     if (!fitEnabled()) return;
     if (fitSettleTimer) clearTimeout(fitSettleTimer);
     fitSettleTimer = setTimeout(function () {
@@ -2947,10 +2969,12 @@
     if (was && !silent) toast('Fit off');
   }
   function toggleFit() {
+    if (state.present) return;
     if (state.view !== 'wall') { toast('Fit is only available on the wall'); return; }
     if (fitEnabled()) disableFit(); else enableFit();
   }
   function recomputeFit() {
+    if (state.present) return;
     if (!fitEnabled()) return;
     if (state.view !== 'wall') { disableFit(true, true); return; }
     var box = fitBox();
@@ -2964,6 +2988,215 @@
       var card = getCard(id);
       if (card) node.style.width = posterWidth(card) + 'px';
     });
+  }
+
+  /* ------------------------------ present mode ---------------------------- */
+  var presentSnap = null;
+  var presentHintTimer = 0;
+  var presentResizeTimer = 0;
+  var presentRefreshTimer = 0;
+  var presentFsRequested = false;
+  function presentOrder() {
+    var list = visibleCards().slice();
+    list.sort(function (a, b) {
+      /* upcoming first: finished posters are still walkable, but they go last */
+      if (!!a.done !== !!b.done) return a.done ? 1 : -1;
+      var ta = dueMs(a);
+      var tb = dueMs(b);
+      var fa = isFinite(ta);
+      var fb = isFinite(tb);
+      if (fa && fb) {
+        if (ta !== tb) return ta - tb;
+        return String(a.title).localeCompare(String(b.title));
+      }
+      if (fa !== fb) return fa ? -1 : 1;
+      return String(a.title).localeCompare(String(b.title));
+    });
+    return list;
+  }
+  function setPresentButton(on) {
+    var btn = ui.btnPresent;
+    if (!btn) return;
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.classList.toggle('is-active', !!on);
+  }
+  function setPresentLabel(text) {
+    if (ui.presentLabel) ui.presentLabel.textContent = String(text == null ? '' : text);
+  }
+  function hidePresentHint() {
+    if (presentHintTimer) { clearTimeout(presentHintTimer); presentHintTimer = 0; }
+    if (ui.presentHint) ui.presentHint.hidden = true;
+  }
+  function showPresentHint() {
+    if (!ui.presentHint) return;
+    ui.presentHint.hidden = false;
+    if (presentHintTimer) clearTimeout(presentHintTimer);
+    presentHintTimer = setTimeout(function () {
+      presentHintTimer = 0;
+      if (ui.presentHint) ui.presentHint.hidden = true;
+    }, 4000);
+  }
+  function applyPresentScale(z) {
+    var canvas = ui.wallCanvas;
+    if (!canvas) return;
+    canvas.style.transformOrigin = '0 0';
+    canvas.style.transform = 'scale(' + z + ')';
+    if (ui.wallView) {
+      ui.wallView.style.width = (CANVAS_W * z) + 'px';
+      ui.wallView.style.height = (CANVAS_H * z) + 'px';
+    }
+  }
+  function setPresentedNode(id) {
+    posterNodes.forEach(function (node, key) {
+      node.classList.toggle('is-presented', key === id);
+    });
+  }
+  function presentOverview() {
+    if (!state.present) return;
+    var stage = ui.stage;
+    if (!stage) return;
+    state.presentId = null;
+    if (ui.app) ui.app.classList.remove('is-spotlight');
+    setPresentedNode(null);
+    var box = fitBox();
+    var z = fitScaleFor(box);
+    if (!isFinite(z) || z <= 0) z = 1;
+    applyPresentScale(z);
+    if (box) {
+      stage.scrollLeft = Math.max(0, box.x * z - 24);
+      stage.scrollTop = Math.max(0, box.y * z - 24);
+    } else {
+      stage.scrollLeft = 0;
+      stage.scrollTop = 0;
+    }
+    setPresentLabel('Whole wall');
+  }
+  function presentFocus(id) {
+    if (!state.present) return;
+    var card = getCard(id);
+    var node = card ? posterNodes.get(id) : null;
+    var stage = ui.stage;
+    if (!card || !node || !stage) { presentOverview(); return; }
+    var w = node.offsetWidth || posterWidth(card);
+    var h = node.offsetHeight || CARD_H_GUESS;
+    var left = parseFloat(node.style.left);
+    if (!isFiniteNum(left)) left = card.x;
+    var top = parseFloat(node.style.top);
+    if (!isFiniteNum(top)) top = card.y;
+    var z = clamp(Math.min((stage.clientWidth * 0.8) / w, (stage.clientHeight * 0.72) / h), 0.6, 2.6);
+    state.presentId = card.id;
+    if (ui.app) ui.app.classList.add('is-spotlight');
+    setPresentedNode(card.id);
+    applyPresentScale(z);
+    stage.scrollLeft = Math.max(0, left * z + (w * z) / 2 - stage.clientWidth / 2);
+    stage.scrollTop = Math.max(0, top * z + (h * z) / 2 - stage.clientHeight / 2);
+    var label = limit(card.title, 60);
+    if (card.course) label += ' \u00b7 ' + card.course;
+    setPresentLabel(label);
+    hidePresentHint();
+  }
+  function presentStep(delta) {
+    if (!state.present) return;
+    hidePresentHint();
+    var order = presentOrder();
+    if (!order.length) { presentOverview(); return; }
+    var idx = -1;
+    if (state.presentId) {
+      for (var i = 0; i < order.length; i++) {
+        if (order[i].id === state.presentId) { idx = i; break; }
+      }
+    }
+    var next;
+    if (idx === -1) next = delta > 0 ? 0 : order.length - 1;
+    else next = ((idx + delta) % order.length + order.length) % order.length;
+    presentFocus(order[next].id);
+  }
+  function presentRefresh() {
+    if (!state.present) return;
+    if (state.presentId) {
+      if (!getCard(state.presentId) || !posterNodes.get(state.presentId)) { presentOverview(); return; }
+      presentFocus(state.presentId);
+      return;
+    }
+    presentOverview();
+  }
+  function schedulePresentRefresh() {
+    if (!state.present) return;
+    if (presentRefreshTimer) return;
+    presentRefreshTimer = setTimeout(function () {
+      presentRefreshTimer = 0;
+      presentRefresh();
+    }, 120);
+  }
+  function enterPresent() {
+    if (state.present) return;
+    if (state.view !== 'wall') setView('wall');
+    var stage = ui.stage;
+    var canvas = ui.wallCanvas;
+    if (!stage || !canvas) return;
+    if (drawer.id) closeDrawer({ flush: false });
+    presentSnap = {
+      transform: canvas.style.transform || '',
+      transformOrigin: canvas.style.transformOrigin || '',
+      wallW: ui.wallView ? (ui.wallView.style.width || '') : '',
+      wallH: ui.wallView ? (ui.wallView.style.height || '') : '',
+      scrollLeft: stage.scrollLeft,
+      scrollTop: stage.scrollTop
+    };
+    state.present = true;
+    state.presentId = null;
+    if (ui.app) ui.app.classList.add('is-presenting');
+    if (ui.presentHud) ui.presentHud.hidden = false;
+    showPresentHint();
+    setPresentButton(true);
+    try {
+      var root = document.documentElement;
+      if (root && typeof root.requestFullscreen === 'function') {
+        presentFsRequested = true;
+        var req = root.requestFullscreen();
+        if (req && typeof req.catch === 'function') req.catch(function () {});
+      }
+    } catch (e) { presentFsRequested = false; }
+    presentOverview();
+  }
+  function exitPresent(fromFullscreen) {
+    if (!state.present) return;
+    state.present = false;
+    state.presentId = null;
+    var stage = ui.stage;
+    var canvas = ui.wallCanvas;
+    if (ui.app) ui.app.classList.remove('is-presenting');
+    if (canvas) {
+      canvas.style.transform = presentSnap ? presentSnap.transform : '';
+      canvas.style.transformOrigin = presentSnap ? presentSnap.transformOrigin : '';
+    }
+    if (ui.wallView) {
+      ui.wallView.style.width = presentSnap ? presentSnap.wallW : '';
+      ui.wallView.style.height = presentSnap ? presentSnap.wallH : '';
+    }
+    if (stage && presentSnap) {
+      stage.scrollLeft = presentSnap.scrollLeft;
+      stage.scrollTop = presentSnap.scrollTop;
+    }
+    presentSnap = null;
+    if (presentRefreshTimer) { clearTimeout(presentRefreshTimer); presentRefreshTimer = 0; }
+    if (presentResizeTimer) { clearTimeout(presentResizeTimer); presentResizeTimer = 0; }
+    if (ui.presentHud) ui.presentHud.hidden = true;
+    hidePresentHint();
+    setPresentButton(false);
+    if (!fromFullscreen && presentFsRequested && document.fullscreenElement && typeof document.exitFullscreen === 'function') {
+      try {
+        var out = document.exitFullscreen();
+        if (out && typeof out.catch === 'function') out.catch(function () {});
+      } catch (e) {}
+    }
+    presentFsRequested = false;
+  }
+  function onFullscreenChange() {
+    if (!state.present) return;
+    if (document.fullscreenElement) return;
+    presentFsRequested = false;
+    exitPresent(true);
   }
 
   /* ----------------------------- chrome condense -------------------------- */
@@ -3367,6 +3600,27 @@
     return false;
   }
   function onGlobalKeydown(e) {
+    if (state.present) {
+      var pk = e.key;
+      if (pk === 'Escape' || pk === 'Esc') {
+        e.preventDefault();
+        if (state.presentId) presentOverview(); else exitPresent();
+        return;
+      }
+      if (pk === 'ArrowRight' || pk === 'ArrowDown' || pk === ' ' || pk === 'Spacebar' || pk === 'PageDown') {
+        e.preventDefault();
+        presentStep(1);
+        return;
+      }
+      if (pk === 'ArrowLeft' || pk === 'ArrowUp' || pk === 'PageUp') {
+        e.preventDefault();
+        presentStep(-1);
+        return;
+      }
+      if (pk === 'o' || pk === 'O') { e.preventDefault(); presentOverview(); return; }
+      if (pk === 'p' || pk === 'P') { e.preventDefault(); exitPresent(); return; }
+      return;
+    }
     if (e.key === 'Escape' || e.key === 'Esc') { handleEscape(); return; }
     if (e.defaultPrevented) return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -3382,6 +3636,7 @@
     if (k === '?') { e.preventDefault(); openHelp(); return; }
     if (k === 'g' || k === 'G') { e.preventDefault(); toggleView(); return; }
     if (k === 'f' || k === 'F') { e.preventDefault(); toggleFit(); return; }
+    if (k === 'p' || k === 'P') { e.preventDefault(); enterPresent(); return; }
   }
   function trapDrawerFocus(e) {
     if (e.key !== 'Tab' || !drawer.id || !ui.drawer) return;
@@ -3408,6 +3663,7 @@
   /* ------------------------------ event wiring ---------------------------- */
   function bindEvents() {
     document.addEventListener('keydown', onGlobalKeydown);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
 
     if (ui.btnAdd) ui.btnAdd.addEventListener('click', function (e) { e.preventDefault(); requestWrite(createCard); });
     if (ui.btnLock) ui.btnLock.addEventListener('click', function (e) {
@@ -3423,6 +3679,14 @@
     if (ui.btnShare) ui.btnShare.addEventListener('click', function (e) { e.preventDefault(); openShare(); });
     if (ui.shareCopy) ui.shareCopy.addEventListener('click', function (e) { e.preventDefault(); copyShareUrl(); });
     if (ui.shareClose) ui.shareClose.addEventListener('click', function (e) { e.preventDefault(); closeDialog(ui.shareDialog); });
+    if (ui.btnPresent) ui.btnPresent.addEventListener('click', function (e) {
+      e.preventDefault();
+      if (state.present) exitPresent(); else enterPresent();
+    });
+    if (ui.presentPrev) ui.presentPrev.addEventListener('click', function (e) { e.preventDefault(); presentStep(-1); });
+    if (ui.presentNext) ui.presentNext.addEventListener('click', function (e) { e.preventDefault(); presentStep(1); });
+    if (ui.presentOverview) ui.presentOverview.addEventListener('click', function (e) { e.preventDefault(); presentOverview(); });
+    if (ui.presentExit) ui.presentExit.addEventListener('click', function (e) { e.preventDefault(); exitPresent(); });
     if (ui.btnHelp) ui.btnHelp.addEventListener('click', function (e) { e.preventDefault(); openHelp(); });
     if (ui.btnMe) ui.btnMe.addEventListener('click', function (e) { e.preventDefault(); openNameDialog(); });
     if (ui.connBadge) ui.connBadge.addEventListener('click', function () {
@@ -3520,6 +3784,13 @@
         refreshPosterWidths();
         if (fitEnabled()) recomputeFit();
       }, 150);
+      if (state.present) {
+        if (presentResizeTimer) clearTimeout(presentResizeTimer);
+        presentResizeTimer = setTimeout(function () {
+          presentResizeTimer = 0;
+          presentRefresh();
+        }, 150);
+      }
     });
     window.addEventListener('blur', hideTrash);
 

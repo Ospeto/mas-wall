@@ -129,6 +129,10 @@
         <kbd class="search-key" aria-hidden="true">/</kbd>
       </div>
 
+      <button id="btnPresent" class="btn btn-present" type="button" aria-pressed="false" title="Present the wall full screen (P)">
+        <span class="btn-label">Present</span>
+      </button>
+
       <button id="btnFit" class="btn btn-fit" type="button" aria-pressed="false" title="Zoom out to see the whole wall (F)">
         <span class="btn-label">Fit</span>
       </button>
@@ -363,6 +367,7 @@
         <div class="key-row"><dt><kbd>Drag</kbd></dt><dd>Move a poster anywhere on the wall</dd></div>
         <div class="key-row"><dt><kbd>← ↑ → ↓</kbd></dt><dd>Nudge the focused poster (Shift = 40px)</dd></div>
         <div class="key-row"><dt><kbd>F</kbd></dt><dd>Fit the whole wall in view</dd></div>
+        <div class="key-row"><dt><kbd>P</kbd></dt><dd>Present mode (&#8592; &#8594; step through posters)</dd></div>
       </dl>
       <p class="dialog-copy dialog-copy-tight">Viewing is open to anyone with the link; adding, editing, dragging and deleting need the class password.</p>
       <div class="dialog-actions">
@@ -389,6 +394,16 @@
       </div>
     </div>
   </dialog>
+
+  <!-- presentation HUD: overview + spotlight stepping over the wall -->
+  <div id="presentHud" class="present-hud" role="group" aria-label="Presentation controls" hidden>
+    <button id="presentPrev" class="present-btn" type="button" aria-label="Previous poster">&#8592;</button>
+    <p id="presentLabel" class="present-label" aria-live="polite">Whole wall</p>
+    <button id="presentNext" class="present-btn" type="button" aria-label="Next poster">&#8594;</button>
+    <button id="presentOverview" class="present-btn present-btn-wide" type="button">Overview</button>
+    <button id="presentExit" class="present-btn present-btn-wide" type="button">Exit</button>
+  </div>
+  <p id="presentHint" class="present-hint" hidden>&#8592; &#8594; posters &middot; O overview &middot; Esc exit</p>
 
 </div>
 

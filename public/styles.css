@@ -3376,7 +3376,190 @@ body.drawer-open .drawer-backdrop {
   }
 }
 
-/* -------------- 18 coarse pointers — the ONLY @media (pointer: coarse) block
+/* --------------------------------------- 18 presentation / projector mode
+   app.js puts .is-presenting on #app, unhides the HUD, and drives the canvas
+   with inline transform/width/height. Nothing here transforms the canvas, so
+   nothing fights the spotlight maths. */
+.app.is-presenting {
+  height: 100dvh;
+  overflow: hidden;
+}
+.app.is-presenting .masthead,
+.app.is-presenting .deadline-strip,
+.app.is-presenting .toolbar,
+.app.is-presenting .offline-banner,
+.app.is-presenting .agenda-view,
+.app.is-presenting .drawer,
+.app.is-presenting .drawer-backdrop {
+  display: none;
+}
+/* the wall takes the whole projector: no strip gap, no scrollbars, no chrome */
+.app.is-presenting .stage {
+  flex: 1 1 auto;
+  height: 100dvh;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.app.is-presenting .stage::-webkit-scrollbar {
+  display: none;
+}
+/* on a projector the "..." affordance is a dead control: hide it */
+.app.is-presenting .poster-open {
+  display: none;
+}
+/* spotlight: everything but the poster being walked through recedes */
+.app.is-presenting.is-spotlight .poster {
+  transition: opacity 220ms var(--ease);
+}
+.app.is-presenting.is-spotlight .poster:not(.is-presented) {
+  opacity: 0.16;
+}
+
+/* the plate: dark, hairline, sits above the bin (850) and under toasts (900) */
+.present-hud {
+  position: fixed;
+  left: 50%;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  z-index: 880;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 24px);
+  padding: 6px;
+  background: rgba(23, 20, 16, 0.9);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  box-shadow: var(--shadow-plate);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.present-btn {
+  flex: none;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--text-dim);
+  font: 600 var(--text-micro)/1 var(--font-mono);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.present-btn:hover {
+  color: var(--text);
+  border-color: var(--rule-strong);
+  background: rgba(244, 238, 226, 0.06);
+}
+.present-btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.present-btn[aria-pressed="true"] {
+  background: var(--paper-bone);
+  border-color: var(--paper-bone);
+  color: var(--ink);
+}
+.present-btn-wide {
+  padding: 0 12px;
+}
+.present-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 46ch;
+  margin: 0;
+  padding: 0 4px;
+  font: 600 var(--text-micro)/1.3 var(--font-mono);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* one coaching line, fades on the way out; [hidden] keeps display:none */
+.present-hint {
+  position: fixed;
+  left: 50%;
+  bottom: calc(62px + env(safe-area-inset-bottom));
+  z-index: 879;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0 8px;
+  font: 500 var(--text-micro)/1.4 var(--font-mono);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 240ms var(--ease);
+}
+
+/* the toolbar entry point — same family as .btn-fit, pressed = bone plate */
+.toolbar .btn-present {
+  flex: none;
+  height: 29px;
+  min-height: 29px;
+  padding: 0 10px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  color: var(--text-dim);
+  font: 600 var(--text-micro)/1 var(--font-mono);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.toolbar .btn-present:not([aria-pressed="true"]):hover {
+  color: var(--text);
+  border-color: var(--rule-strong);
+  background: rgba(244, 238, 226, 0.07);
+}
+.toolbar .btn-present[aria-pressed="true"] {
+  background: var(--paper-bone);
+  border-color: var(--paper-bone);
+  color: var(--ink);
+  box-shadow: var(--lift-1);
+}
+
+@media (max-width: 640px) {
+  /* projector is a desk feature; the phone toolbar row is already tight */
+  .toolbar .btn-present {
+    display: none;
+  }
+  .present-hud {
+    width: calc(100vw - 20px);
+    max-width: calc(100vw - 20px);
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 4px;
+    padding: 5px;
+  }
+  .present-label {
+    order: -1;
+    flex: 1 1 100%;
+    max-width: 100%;
+    padding: 2px 2px 3px;
+    text-align: center;
+  }
+  .present-hint {
+    bottom: calc(104px + env(safe-area-inset-bottom));
+    max-width: calc(100vw - 24px);
+    white-space: normal;
+  }
+}
+
+/* -------------- 19 coarse pointers — the ONLY @media (pointer: coarse) block
    in this file, and deliberately last: the narrow-viewport blocks above shrink
    buttons to 32px, so every touch rule lives here and wins by order. Add new
    touch rules here, never in a new coarse block. */
@@ -3421,6 +3604,16 @@ body.drawer-open .drawer-backdrop {
     min-height: 32px;
     padding: 6px 10px;
   }
+  /* presentation controls */
+  .present-btn {
+    height: 40px;
+    min-height: 40px;
+    min-width: 40px;
+  }
+  .toolbar .btn-present {
+    height: 40px;
+    min-height: 40px;
+  }
 
   /* the wall itself: normal swipes scroll, a long-press "lifts" a poster and
      app.js then prevents the next touchmove so the drag (and the bin) take over */
@@ -3460,7 +3653,7 @@ body.drawer-open .drawer-backdrop {
   }
 }
 /* nothing after this block: the coarse-pointer rules above are the last word */
-/* -------------------------------------------------- 19 share dialog */
+/* -------------------------------------------------- 20 share dialog */
 .share-dialog {
   width: min(92vw, 620px);
 }
@@ -3542,7 +3735,7 @@ body.drawer-open .drawer-backdrop {
   }
 }
 
-/* ------------------------------------------------------ 20 print paper */
+/* ------------------------------------------------------ 21 print paper */
 /* The wall is a screen object. On paper this becomes one agenda document,
    ink on white, no grain, no chrome, whatever view the browser is showing. */
 @media print {
@@ -3606,6 +3799,23 @@ body.drawer-open .drawer-backdrop {
     display: none !important;
   }
 
+  /* presentation never reaches paper: the HUD is gone and the projector
+     shell is collapsed back to a flow document */
+  .present-hud,
+  .present-hint,
+  .toolbar .btn-present {
+    display: none !important;
+  }
+  .app.is-presenting {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .app.is-presenting .stage {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
   .stage {
     display: block !important;
     height: auto !important;

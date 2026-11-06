@@ -227,6 +227,10 @@ Drawer edits autosave (debounce 350ms) via `card.upsert`; no Save button.
 - Responsive: <900px agenda default, toolbar becomes two rows (the filter strip scrolls
   horizontally), drawer full-screen, no horizontal page overflow; canvas still
   pannable/scrollable on desktop and phones (rail hidden in the mobile agenda view).
+- Presentation: P (or the Present button) enters a read-only presenter — fullscreen when
+  allowed, chrome hidden, whole-wall overview first; arrow keys/Space step through the
+  visible posters in due order (done last), O returns to overview, Esc/P exits and
+  restores the previous transform and scroll. HUD bottom-centre, no edits in mode.
 - States: loading, empty, offline banner, toasts, hover/active/focus-visible,
   reduced-motion. Contrast: body text >= 4.5:1.
 - Navigation: Fit control / F key zooms the wall out so every poster is in view
